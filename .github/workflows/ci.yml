@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # 零依赖：测试替身 node_modules/@deepseek-ai/dsh-tools 随库提交，无需 npm install
+      - name: Engine syntax check
+        run: node --check engine/host.js
+
+      - name: package.json validity
+        run: node -e "const p=JSON.parse(require('fs').readFileSync('package.json','utf8')); if(!p.dsh||!p.dsh.bundle||!p.dsh.bundle.patch) throw new Error('dsh.bundle.patch missing'); console.log('bundle contract:', p.dsh.bundle.patch)"
+
+      - name: Bundle patch presence
+        run: test -f cordis.patch.yml && grep -q "mpm-flywheel" cordis.patch.yml
+
+      - name: Smoke tests
+        run: node --test test/smoke.test.mjs
