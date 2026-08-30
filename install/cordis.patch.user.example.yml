@@ -1,0 +1,11 @@
+# MetaFlywheel 引擎挂载样例
+# 复制到 ~/.dsh/mpm/cordis.patch.user.yml 并把 <YOUR_HOME> 替换为你的用户主目录。
+# 进程启动时加载；修改引擎代码后需重启 DSH 宿主生效。
+#
+# 说明：
+# - agent-loop 行是 DSH 会话连续性语义所依赖的实现选择（demand），与本引擎无耦合；
+#   若你的部署已有该行，删除本样例中的 agent-loop 块，只保留 insert 块。
+# - file:// URL 指向引擎单文件（本仓库 engine/host.js 的安装位置）。
+- insert:
+  - id: mpm-flywheel
+    name: file:///<YOUR_HOME>/.dsh/mpm/engine/host.js

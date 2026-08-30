@@ -1,0 +1,5 @@
+# 测试替身 node_modules（@deepseek-ai/dsh-tools 的最小 stub）提交在库中；其余一律忽略
+node_modules/*
+!node_modules/@deepseek-ai
+node_modules/@deepseek-ai/*
+!node_modules/@deepseek-ai/dsh-tools
