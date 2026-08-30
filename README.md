@@ -32,6 +32,10 @@ MetaFlywheel 不是独立的 npm 包。它是 [DSH（DeepSeek Harness）](https:
 
 ## 安装（DSH 宿主）
 
+三种方式，按重量递增：
+
+**方式 A · 组合行直接挂载（最轻，当前推荐）**——适合已经手写组合补丁的部署：
+
 1. 复制引擎到用户配置目录：
 
 ```
@@ -46,6 +50,17 @@ MetaFlywheel 不是独立的 npm 包。它是 [DSH（DeepSeek Harness）](https:
   - id: mpm-flywheel
     name: file:///<你的HOME>/.dsh/mpm/engine/host.js
 ```
+
+**方式 B · profile 插件依赖（官方插件管理途径）**——DSH 通过 `dsh plugin` 将 out-of-tree 插件以 pnpm 安装进 profile 的 `node_modules`：
+
+```powershell
+git clone https://github.com/<you>/metaflywheel.git
+dsh plugin --profile web add <克隆路径或发布后的包名>
+```
+
+然后在 profile 的 `cordis.patch.yml`（或 home 级 `$DSH_HOME/cordis.patch.yml`）中 insert 引擎行（同方式 A 的 insert 块，URL 指向 profile node_modules 内的入口）。
+
+**方式 C · npm 包（生态分发）**：`npm publish` 后，任何部署可经方式 B 的 `dsh plugin add metaflywheel` 一键安装。
 
 3. 重启 DSH 宿主。启动后引擎向系统提示注入自我快照（在轮问题、陈旧警告、指令流、代谢摘要），代理即获得九个生命周期工具：
 
