@@ -1,10 +1,40 @@
 {
   "name": "metaflywheel",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MetaFlywheel — Meta-Problem Modeling (MPM) cognitive flywheel as a resident engine for LLM agent runtimes",
   "type": "module",
   "license": "MIT",
+  "main": "engine/host.js",
+  "exports": {
+    ".": "./engine/host.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "engine/host.js",
+    "cordis.patch.yml",
+    "docs/",
+    "tools/",
+    "test/",
+    "install/",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4",
+    "@deepseek-ai/dsh-tools": "*"
+  },
   "scripts": {
-    "test": "node --import ./test/register-hooks.mjs --test test/smoke.test.mjs"
+    "test": "node --test test/smoke.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NBagent-dev/metaflywheel.git"
   }
 }

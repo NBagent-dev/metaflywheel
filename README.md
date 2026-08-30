@@ -51,14 +51,19 @@ MetaFlywheel 不是独立的 npm 包。它是 [DSH（DeepSeek Harness）](https:
     name: file:///<你的HOME>/.dsh/mpm/engine/host.js
 ```
 
-**方式 B · profile 插件依赖（官方插件管理途径）**——DSH 通过 `dsh plugin` 将 out-of-tree 插件以 pnpm 安装进 profile 的 `node_modules`：
+**方式 B · 官方 bundle 形态（v0.1.1 起）**——本包自 v0.1.1 起符合 DSH 的 bundle 契约（以官方 `@deepseek-ai/dsh-base` 为蓝本）：包根 `cordis.patch.yml` 自述挂载行，`package.json` 的 `"dsh": {"bundle": {"patch": ...}}` 字段使宿主可机器识别：
 
 ```powershell
-git clone https://github.com/<you>/metaflywheel.git
-dsh plugin --profile web add <克隆路径或发布后的包名>
+# 1. 把包装进 profile 的 node_modules（来源可以是发布后的 npm 包名、本地路径或 git URL）
+dsh plugin --profile web add <本地克隆路径或 npm 包名 metaflywheel>
+
+# 2. 在 profile 的 dsh.profile manifest 的 bundles 列表加一行（有序，位于 dsh-base 之后即可）
+#    bundles: [ "@deepseek-ai/dsh-base", "...", "metaflywheel" ]
+
+# 3. 重启宿主；bundle patch 自行 insert mpm-flywheel 行，无需手写组合行
 ```
 
-然后在 profile 的 `cordis.patch.yml`（或 home 级 `$DSH_HOME/cordis.patch.yml`）中 insert 引擎行（同方式 A 的 insert 块，URL 指向 profile node_modules 内的入口）。
+用 `dsh --dump-default-config` / `--dump-config` 可在不启动的情况下检查叠加结果。
 
 **方式 C · npm 包（生态分发）**：`npm publish` 后，任何部署可经方式 B 的 `dsh plugin add metaflywheel` 一键安装。
 

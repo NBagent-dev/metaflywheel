@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.1（2026-08-29）
+
+升级为 DSH 官方 bundle 契约形态（以 `@deepseek-ai/dsh-base` 实物为蓝本），可被 `dsh plugin` 流程索引安装：
+
+- 包根新增 `cordis.patch.yml`（bundle 自述挂载 patch：insert `mpm-flywheel` 行，name 解析到包 main）
+- `package.json` 新增 `"dsh": {"bundle": {"patch": "./cordis.patch.yml"}}` 机器可读声明；`main`/`exports` 指向 `engine/host.js`；`peerDependencies` 声明宿主契约（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-tools`）；`files` 收录发布物
+- 安装方式 B 从"约定提法"升级为真实契约：`dsh plugin --profile <name> add <来源>` + 在 `dsh.profile.bundles` 加一行 `metaflywheel`
+- 单包双形态兼容：file:// 直挂 `engine/host.js`（v0.1.0 方式）与 bundle 包名解析（v0.1.1 方式）加载同一模块，行为一致
+- `repository` 字段补全
+
 ## v0.1.0（2026-08-29）
 
 首个可发布版本。引擎源起于单用户生产环境（31 个问题 / 20 份沉积物 / 34 轮巡检的实战台账），按开源就绪度审计完成打包：参数化部署路径、补齐文档与许可证、新增宿主无关冒烟测试。

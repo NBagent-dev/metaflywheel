@@ -1,0 +1,11 @@
+# MetaFlywheel bundle patch: mounts the MPM cognitive flywheel engine row
+# over the empty profile root. Self-describing bundle: this file is declared
+# in package.json under dsh.bundle.patch, and the row's `name` resolves
+# through the package main (engine/host.js, which exports name/inject/apply
+# per the Cordis plugin contract — the same module a file:// mount loads).
+#
+# Override the row from a later layer (profile cordis.patch.yml or --patch)
+# by id; last write wins per row.
+- insert:
+    - id: mpm-flywheel
+      name: 'metaflywheel'
