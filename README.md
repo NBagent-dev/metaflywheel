@@ -99,6 +99,16 @@ dsh plugin --profile web add <本地克隆路径或 npm 包名 metaflywheel>
 
 - `tools/mpm_distill.py`：把飞轮台账（`.mpm/flywheel.json`）蒸馏为 JSONL 微调训练对——将"方法论遵行"的程序性记忆从外部结构向模型权重内化的路径（行为克隆边界见脚本 docstring）。
 
+## 可视化面板（可选，按需挂载）
+
+`view/flywheel-view.plugin.js` 是「认知飞轮」Web 视图的动态插件源：六阶段飞轮图、焦点题 δ/ε/C 卡、最近动态与沉积列表。**设计立场是不做仪表盘**——人的大脑不给自己显示读数，意识状态是质感：积压压力 S(t) 驱动飞轮转速与色温（转得急、色偏暖=积压在涨），θ_G 漂移显示为外圈的不安脉动，搁置题是挂在轮辐上的灰色休眠节点，精确数值退到悬停 tooltip（导师要看账本时才开仪表）。旧引擎快照自动降级为基础视图。
+
+挂载（任一 DSH 会话）：
+
+1. 加载 `cordis-plugin-development` 技能；
+2. `cordis_define` 新插件：`code.host` = 源文件 HOST 半函数体，`code.client` = CLIENT 半函数体（文件内注释体，去注释即用）；
+3. `cordis_run` → Web 头部视图排出现「认知飞轮」，随进程消亡，不影响引擎与状态。
+
 ## 测试
 
 ```
