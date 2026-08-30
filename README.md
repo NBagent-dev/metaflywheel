@@ -34,7 +34,19 @@ MetaFlywheel 不是独立的 npm 包。它是 [DSH（DeepSeek Harness）](https:
 
 ## 安装（DSH 宿主）
 
-三种方式，按重量递增：
+**一键安装**（推荐，自动完成 add + 注册验证 + 重启提示）：
+
+```powershell
+# Windows PowerShell
+irm https://raw.githubusercontent.com/NBagent-dev/metaflywheel/main/install/install.ps1 -OutFile install-mfw.ps1; .\install-mfw.ps1
+```
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/NBagent-dev/metaflywheel/main/install/install.sh | bash
+```
+
+以下为手动方式，按重量递增：
 
 **方式 A · 组合行直接挂载（最轻，当前推荐）**——适合已经手写组合补丁的部署：
 
