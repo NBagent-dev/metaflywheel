@@ -160,3 +160,46 @@ test('收敛证据门禁：无求解登记的收敛被拒绝', async () => {
   assert.equal(c.ok, false, '无 solve 登记且无代价增长，收敛必须被拒');
   assert.ok(String(c.report).includes('证据门禁'), JSON.stringify(c));
 });
+
+test('P047 settled 终态：判定即结账，退出在轮统计（S(t) 压力可清偿）', async () => {
+  const { ctx, registered, provided } = makeMockCtx();
+  const mod = await import('../engine/host.js');
+  mod.apply(ctx);
+
+  // 题A：微通道完全收敛但无沉积正文 → 判定 none → settled（已消化不占肠道）
+  const r1 = await callTool(registered, 'mpm_micro', {
+    title: '结账题A', statement: '初始=a；目标=b；约束=c；算子=d；判据=e',
+    action: '完成', delta: 0.2, epsilon: 0.1, robustness: 'pass',
+  });
+  assert.equal(r1.ok, true, JSON.stringify(r1));
+  assert.ok(String(r1.report).includes('D 沉积：none'), JSON.stringify(r1));
+
+  // 题B：带沉积正文 → 走既有 D 阶段出口（stage=D 本就不计入压力）
+  const r2 = await callTool(registered, 'mpm_micro', {
+    title: '结账题B', statement: '初始=a；目标=b；约束=c；算子=d；判据=e',
+    action: '完成', delta: 0.2, epsilon: 0.1, robustness: 'pass',
+    depositTitle: '结账沉积', depositBody: '复用价值正文',
+  });
+  assert.equal(r2.ok, true, JSON.stringify(r2));
+
+  // 题C：converge 完全收敛但 D 判定未做 → 仍在轮（真实待决工作）
+  const g = await callTool(registered, 'mpm_generate', { title: '待判题C', observation: 'x' });
+  await callTool(registered, 'mpm_frame', {
+    problemId: g.id, delta: 0.2,
+    statement: '【初始状态】a；【目标状态】b；【约束】c；【可用算子】d；【成功判据】e',
+  });
+  await callTool(registered, 'mpm_solve', { problemId: g.id, action: '推进', epsilon: 0.1 });
+  const c3 = await callTool(registered, 'mpm_converge', { problemId: g.id, delta: 0.15, epsilon: 0.1, robustness: 'pass', notes: 'x' });
+  assert.equal(c3.ok, true, JSON.stringify(c3));
+
+  const snap = provided.mpmFlywheel.snapshot();
+  const a = snap.problems.find((p) => p.title === '结账题A');
+  const b = snap.problems.find((p) => p.title === '结账题B');
+  const cc = snap.problems.find((p) => p.title === '待判题C');
+  assert.equal(a.settled, true, '判定 none 的题应 settled');
+  assert.equal(a.settledVia, 'micro-none');
+  assert.equal(b.settled, false, '已沉积题走 D 阶段出口，无需 settled 标记');
+  assert.equal(b.stage, 'D');
+  assert.equal(cc.settled, false, '完全收敛但 D 未判定的题不得提前结账');
+  assert.equal(snap.stats.active, 1, '在轮=真实待消化压力：仅题C（未判定 D 的收敛题）');
+});

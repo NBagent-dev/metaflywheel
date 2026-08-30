@@ -157,6 +157,19 @@ export function apply(ctx) {
         }
         // P027/B5 迁移：按新增益公式重算历史题 gain（旧口径在沉积时写入，结构上恒 0）
         if (bp.delta0 != null) bp.gain = gainOf(bp);
+        // P047 迁移：存量 C 题结账——完全收敛(ε≤0.1)且 30min 无动静、或已有"判定:none"记录者置 settled。
+        // 保守组合条件避免误伤真在轮题；evoke 通道可随时由沉积物重开新题。
+        if (bp.stage === 'C' && !bp.parked && !bp.settled && bp.epsilon != null && bp.epsilon <= 0.1) {
+          const hist = bp.history || [];
+          let judgedNone = false, fullyConverged = false;
+          for (const h of hist) {
+            const ev = String((h && h.event) || '');
+            if (ev.indexOf('D 沉积判定:none') === 0) judgedNone = true;
+            if (ev.indexOf('C 收敛检查') === 0 && ev.indexOf('完全收敛') >= 0) fullyConverged = true;
+          }
+          const quiet = bp.updatedAt && (Date.now() - bp.updatedAt > 30 * 60000);
+          if (judgedNone || (fullyConverged && quiet)) bp.settled = { at: Date.now(), via: judgedNone ? 'migrate-judged' : 'migrate-converged' };
+        }
       }
       diag.lastRestore = '已加载最新状态 ' + root.current + ' (freshness ' + best.fr + '，扫描 ' + cands.length + ' 个候选根)';
       console.log('[mpm][engine] ' + diag.lastRestore);
@@ -373,6 +386,8 @@ export function apply(ctx) {
         gain: p.gain, evokedBy: p.evokedBy,
         phi: p.phi == null ? null : p.phi, lastRevision: p.lastRevision == null ? null : p.lastRevision,
         parked: !!p.parked, awakenWhen: p.parked ? p.parked.awakenWhen : '',
+        settled: !!p.settled, settledVia: p.settled ? p.settled.via : null,
+        open: !!p.openEnded,
         depositPath: p.deposit ? p.deposit.path : null,
         thresholds: p.thresholds, updatedAt: p.updatedAt,
         recent: p.history.slice(-8).map(function (h) { return { at: h.at, event: h.event, note: h.note }; })
@@ -387,7 +402,8 @@ export function apply(ctx) {
       problems: list,
       sediments: state.sediments.slice(-8).reverse(),
       stats: {
-        total: list.length, active: byStage.G + byStage.F + byStage.S + byStage.C,
+        total: list.length,
+        active: list.filter(function (x) { return !x.settled && !x.parked && !x.open && (x.stage === 'G' || x.stage === 'F' || x.stage === 'S' || x.stage === 'C'); }).length, // P047：在轮=真实待消化压力（不含已结账/搁置/开放题）
         byStage, deposits: state.sediments.length,
         cycles, gain: Math.round(gain * 100) / 100,
         learnt,
@@ -805,6 +821,7 @@ export function apply(ctx) {
           depLine = '\nD 沉积：' + sed.id + ' → ' + absPath;
         } else {
           touch(p, 'D 沉积判定:none(无复用价值——熵屏障：沉积物通胀同样是熵增)', '');
+          p.settled = { at: Date.now(), via: 'micro-none' }; // P047：判定即结账——已消化题退出积压压力（S(t) 恢复可清偿语义）
           depLine = '\nD 沉积：none（无复用价值，理由入账——熵屏障保留选择性）';
         }
       }
@@ -1232,7 +1249,7 @@ export function apply(ctx) {
       const activeIds = [];
       for (let i = 0; i < ids.length; i++) {
         const p = state.problems[ids[i]];
-        if (isParked(p) || isOpen(p)) continue; // P027/A1+P003/§5.4：搁置与开放题退出代谢采样、停滞检测与议程
+        if (isParked(p) || isOpen(p) || p.settled) continue; // P027/A1+P003/§5.4+P047：搁置、开放与已结账题退出代谢采样、停滞检测、议程与压力计
         if (p.stage === 'G' || p.stage === 'F' || p.stage === 'S' || p.stage === 'C') {
           activeIds.push({ id: p.id, cost: p.cost, stage: p.stage });
         }
