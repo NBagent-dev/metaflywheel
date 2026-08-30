@@ -101,6 +101,8 @@ dsh plugin --profile web add <本地克隆路径或 npm 包名 metaflywheel>
 
 ## 可视化面板（可选，按需挂载）
 
+![认知飞轮工作质感视图](https://raw.githubusercontent.com/NBagent-dev/metaflywheel/main/docs/flywheel-view.png)
+
 `view/flywheel-view.plugin.js` 是「认知飞轮」Web 视图的动态插件源：六阶段飞轮图、焦点题 δ/ε/C 卡、最近动态与沉积列表。**设计立场是不做仪表盘**——人的大脑不给自己显示读数，意识状态是质感：积压压力 S(t) 驱动飞轮转速与色温（转得急、色偏暖=积压在涨），θ_G 漂移显示为外圈的不安脉动，搁置题是挂在轮辐上的灰色休眠节点，精确数值退到悬停 tooltip（导师要看账本时才开仪表）。旧引擎快照自动降级为基础视图。
 
 挂载（任一 DSH 会话）：
