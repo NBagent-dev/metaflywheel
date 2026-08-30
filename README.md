@@ -1,5 +1,7 @@
 # MetaFlywheel
 
+![DSH Plugin](https://img.shields.io/badge/topic-dsh--plugin-2563eb) ![License](https://img.shields.io/badge/license-MIT-green) ![Bundle](https://img.shields.io/badge/DSH-bundle%20contract-0d9488) ![Tests](https://img.shields.io/badge/tests-4%2F4-passing-brightgreen) ![Version](https://img.shields.io/badge/version-0.1.1-blueviolet)
+
 **元问题建模（MPM）认知飞轮的 LLM 代理运行时实现**——把一篇问题方法论论文变成一个在你的 AI 代理进程里常驻运转、持续记账、自主审议的认知引擎。
 
 > 对外项目名 **MetaFlywheel**（meta = 元问题建模，flywheel = 认知飞轮）；在 DSH 宿主组合中注册的引擎行 id 为 `mpm-flywheel`，二者并行，互不冲突。
