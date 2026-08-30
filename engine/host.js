@@ -372,6 +372,7 @@ export function apply(ctx) {
         iteration: p.iteration, reentries: p.reentries, cost: p.cost,
         gain: p.gain, evokedBy: p.evokedBy,
         phi: p.phi == null ? null : p.phi, lastRevision: p.lastRevision == null ? null : p.lastRevision,
+        parked: !!p.parked, awakenWhen: p.parked ? p.parked.awakenWhen : '',
         depositPath: p.deposit ? p.deposit.path : null,
         thresholds: p.thresholds, updatedAt: p.updatedAt,
         recent: p.history.slice(-8).map(function (h) { return { at: h.at, event: h.event, note: h.note }; })
@@ -391,7 +392,16 @@ export function apply(ctx) {
         cycles, gain: Math.round(gain * 100) / 100,
         learnt,
         persisted: !!(fsSvc && root.current), root: root.current
-      }
+      },
+      // v0.2 工作质感层：意识状态信号（纯派生标量，§8.2.2 测量层输出）
+      measure: {
+        lastS: state.measure.samples.length ? state.measure.samples[state.measure.samples.length - 1].s : null,
+        samples: state.measure.samples.slice(-24).map(function (x) { return { s: x.s }; }),
+        driftSignals: state.measure.driftSignals.slice(-3)
+      },
+      patrol: { rounds: state.patrol.rounds, lastAt: state.patrol.lastAt },
+      governance: { count: state.constitution.log.length, autonomy: state.constitution.autonomy },
+      drift: { active: drift.active, reason: drift.reason }
     };
   }
   // M2 边界强制：区分账内/账外工作。有在轮题(G/F/S/C)→工具调用计入其代谢代价并清零账外计数；
