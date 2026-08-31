@@ -16,7 +16,7 @@ export const inject = ["systemPrompt", "tools", "fs", "sandboxPolicy", "timer"];
 
 export function apply(ctx) {
   const STAGE_NAMES = { G: '生成', F: '界定', S: '求解', C: '收敛', D: '沉积', E: '激发' };
-  const state = { seq: 0, problems: {}, sediments: [], patrol: { rounds: 0, lastAt: 0, lastReport: '' }, measure: { samples: [], driftSignals: [] }, constitution: { autonomy: true, grantedAt: null, log: [], pending: [], lastFireAt: 0 } };
+  const state = { seq: 0, problems: {}, sediments: [], patrol: { rounds: 0, lastAt: 0, lastReport: '' }, measure: { samples: [], driftSignals: [] }, constitution: { autonomy: true, grantedAt: null, log: [], pending: [], lastFireAt: 0 }, valence: { events: [] } };
   const fsSvc = ctx.get('fs');
   const policy = ctx.get('sandboxPolicy');
   const diag = { lastSource: 'none', lastEvidence: null, lastRestore: '' };
@@ -132,6 +132,10 @@ export function apply(ctx) {
         grantedAt: (best.data.constitution && best.data.constitution.grantedAt) || null,
         log: cLog, pending: [], lastFireAt: (best.data.constitution && best.data.constitution.lastFireAt) || 0
       };
+      // R1 效价账本迁移（P023）：旧态无 valence 字段——schema 回填（P011 类"旧态×新字段"纪律）
+      state.valence = best.data.valence && Array.isArray(best.data.valence.events)
+        ? { events: best.data.valence.events.slice(-200) }
+        : { events: [] };
       // Schema migration on restore: backfill fields introduced after a
       // problem was first persisted. Never assume new fields exist on old state.
       for (const bk in state.problems) {
@@ -194,7 +198,7 @@ export function apply(ctx) {
     if (!fsSvc || !root.current) return;
     try {
       const target = await fsSvc.resolve(stateFile(root.current));
-      const plain = { seq: state.seq, problems: state.problems, sediments: state.sediments, lastRoot: root.current, patrol: state.patrol, measure: state.measure, constitution: { autonomy: state.constitution.autonomy, grantedAt: state.constitution.grantedAt, log: state.constitution.log, lastFireAt: state.constitution.lastFireAt } };
+      const plain = { seq: state.seq, problems: state.problems, sediments: state.sediments, lastRoot: root.current, patrol: state.patrol, measure: state.measure, constitution: { autonomy: state.constitution.autonomy, grantedAt: state.constitution.grantedAt, log: state.constitution.log, lastFireAt: state.constitution.lastFireAt }, valence: { events: (state.valence && Array.isArray(state.valence.events)) ? state.valence.events.slice(-200) : [] } };
       await fsSvc.writeText(target, JSON.stringify(plain, null, 2));
       await writeHint();
     } catch (e) {
@@ -327,11 +331,122 @@ export function apply(ctx) {
         if (ok) {
           s.cites = (s.cites || 0) + 1;
           s.lastCitedAt = Date.now();
+          valenceRecord('cite');
           hit.push(s.id);
         }
       }
       return hit;
     } catch (e) { return []; }
+  }
+  // ===== R1 效价账本（P023 工程半降维件①，2026-08-30 开工令）=====
+  // 在线效价信号——意识功能清单"效价格"的第一块（P023 第6界定）。事件→效价映射，
+  // R(t)=指数衰减和。τ=48h（P018 常数族 v0：与巡检20min/沉积衰减14d 同族，待测量史导出退役）。
+  // 映射 v1 诚实注记：搁置(parked)与生命周期门禁拒绝是合法生命周期动作，不罚——
+  // 罚分会惩罚智慧；负效价只计真实失真与违规。落盘搭下一次 persist() 顺风车（记账不阻塞主流程）。
+  const VALENCE_TAU_MS = 48 * 3600 * 1000;
+  const VALENCE_KINDS = { converge: 2, cite: 1, incident: -1, misframe: -1, reject: -1 };
+  function valenceRecord(kind) {
+    try {
+      const v = VALENCE_KINDS[kind];
+      if (v == null) return;
+      if (!state.valence || !Array.isArray(state.valence.events)) state.valence = { events: [] };
+      state.valence.events.push({ at: Date.now(), kind: kind, v: v });
+      if (state.valence.events.length > 200) state.valence.events.splice(0, state.valence.events.length - 200);
+    } catch (e) { /* 效价记账永不阻断主流程 */ }
+  }
+  function valenceSummaryLine() {
+    try {
+      const evs = state.valence && Array.isArray(state.valence.events) ? state.valence.events : [];
+      if (!evs.length) return '';
+      const now = Date.now();
+      let rt = 0, win = 0, pos = 0, neg = 0;
+      for (let i = 0; i < evs.length; i++) {
+        const e = evs[i];
+        rt += e.v * Math.exp(-(now - e.at) / VALENCE_TAU_MS);
+        if (now - e.at <= VALENCE_TAU_MS) { win += 1; if (e.v > 0) pos += 1; else if (e.v < 0) neg += 1; }
+      }
+      rt = Math.round(rt * 10) / 10;
+      return '- 效价：R(t)=' + (rt >= 0 ? '+' : '') + rt.toFixed(1) + '（近48h ' + win + ' 事件：正 ' + pos + ' · 负 ' + neg + '）——R1 效价账本 v1（P023），提示级强化数据源。';
+    } catch (e) { return ''; }
+  }
+  // ===== D 检索小脑（P023 工程半降维件②，2026-08-30 开工令续）=====
+  // 零训练程序性记忆器官：沉积+已结算账本 → bigram 相似度检索 → 按当前在轮题注入。
+  // 语料纪律沿用 P027/A4（DF>40% 的领域通用词不计入，有效重叠≥2 才算命中）。
+  // 判据②"与全量快照对照差异可测"：记忆区按引用数排序（热度序），检索区按相似度排序
+  // （任务相关序）并附命中分——两序之差即对照证据。v2 可与 M9③ 去重合并。
+  const RETRIEVE_TOP_N = 2;
+  const RETRIEVE_MIN_SCORE = 0.35; // 与 M9③ 因材施教同阈值（v0）
+  function corpusDf(corpus) {
+    const df = {};
+    for (let i = 0; i < corpus.length; i++) {
+      const seen = {};
+      for (const g of bigrams(corpus[i].text)) { if (!seen[g]) { seen[g] = true; df[g] = (df[g] || 0) + 1; } }
+    }
+    return { df: df, total: corpus.length };
+  }
+  function retrieveTop(queryText, corpus, topN, minScore) {
+    try {
+      const Q = bigrams(queryText);
+      const d = corpusDf(corpus);
+      const out = [];
+      for (let i = 0; i < corpus.length; i++) {
+        const B = bigrams(corpus[i].text);
+        let inter = 0, eff = 0;
+        for (const g of B) {
+          if (d.df[g] && d.total && d.df[g] / d.total > 0.4) continue;
+          eff += 1;
+          if (Q.has(g)) inter += 1;
+        }
+        const score = eff ? inter / eff : 0;
+        if (score >= minScore && inter >= 2) out.push({ ref: corpus[i].ref, score: Math.round(score * 100) / 100 });
+      }
+      out.sort(function (a, b) { return b.score - a.score; });
+      return out.slice(0, topN);
+    } catch (e) { return []; }
+  }
+  function topActiveProblem() {
+    let top = null;
+    for (const k in state.problems) {
+      const p = state.problems[k];
+      if ((p.stage === 'S' || p.stage === 'F' || p.stage === 'C') && (!top || p.updatedAt > top.updatedAt)) top = p;
+    }
+    return top;
+  }
+  function retrievalHits() {
+    // 返回 [{text}]——内容行，前缀由调用方决定（快照'- 检索小脑(P023-D)：'/状态视图'[小脑] '）
+    const out = [];
+    try {
+      const top = topActiveProblem();
+      if (!top) return out;
+      const query = top.title + ' ' + String(top.framing || '');
+      const sedCorpus = [];
+      for (let i = 0; i < state.sediments.length; i++) {
+        const s = state.sediments[i];
+        // 语料 v1.2 = M9③ 产线契约逐字镜像：title+tags（digest 只做资格过滤不进语料）。
+        // v1.1 实测教训：digest 进语料使 eff 从~20 涨到~150，inter/eff 全体稀释到阈值之下——
+        // 语料密度是 M9③ 0.35 阈值成立的前提，不可违背。
+        sedCorpus.push({ text: s.title + ' ' + (s.tags || []).join(' '), ref: s });
+      }
+      const sedHits = retrieveTop(query, sedCorpus, RETRIEVE_TOP_N, RETRIEVE_MIN_SCORE);
+      if (sedHits.length) {
+        const parts = [];
+        for (let i = 0; i < sedHits.length; i++) parts.push(sedHits[i].ref.id + '(' + sedHits[i].score + ')');
+        out.push('与【' + top.id + '】相似的沉积 ' + parts.join('·') + '——全文按需读取（.mpm/deposits/）');
+      }
+      const probCorpus = [];
+      for (const k in state.problems) {
+        const p = state.problems[k];
+        if (p.id === top.id) continue;
+        if (p.stage === 'C' || p.stage === 'D' || p.stage === 'E') probCorpus.push({ text: p.title + ' ' + String(p.framing || '').slice(0, 120), ref: p });
+      }
+      const probHits = retrieveTop(query, probCorpus, RETRIEVE_TOP_N, RETRIEVE_MIN_SCORE);
+      if (probHits.length) {
+        const parts = [];
+        for (let i = 0; i < probHits.length; i++) parts.push(probHits[i].ref.id + ' ' + String(probHits[i].ref.title).slice(0, 40) + '(' + probHits[i].score + ')');
+        out.push('与【' + top.id + '】相似的历史经验 ' + parts.join('·') + '——同类 framing/沉积可复用');
+      }
+    } catch (e) {}
+    return out;
   }
   function newProblem(title, observation, evokedBy) {
     state.seq += 1;
@@ -533,6 +648,7 @@ export function apply(ctx) {
         if (st === 'G' || st === 'F' || st === 'S' || st === 'C') { hasActive = true; break; }
       }
       if (hasActive || outsideCalls < BLOCK_THRESHOLD) return undefined;
+      valenceRecord('reject');
       console.warn('[mpm][engine] 边界硬拦截: ' + name3 + ' (账外计数=' + outsideCalls + ')');
       return 'MPM 边界硬拦截：无在轮题而账外工具调用已达 ' + outsideCalls + ' 次。总账原则要求先入账——调用 mpm_micro（小型任务一息入账）或 mpm_generate（建正式题）后自动放行；mpm_flywheel_state 可查看飞轮。';
     }));
@@ -612,6 +728,7 @@ export function apply(ctx) {
       if (rev != null && rev >= 0.5 && p.delta != null && p.delta <= 0.2) {
         p.deltaIncidents = (p.deltaIncidents || 0) + 1;
         p.deltaCredit = Math.max(0.5, (p.deltaCredit == null ? 1 : p.deltaCredit) * 0.85);
+        valenceRecord('incident');
       }
       // F 边际规则(§4.2)：回溯改写过小 → 继续界定的边际收益存疑
       p.marginalWarn = !!(wasFramed && rev != null && rev < 0.3);
@@ -747,6 +864,8 @@ export function apply(ctx) {
       if (type.indexOf('误界定') === 0) next += '\n§5.4 方法论回应：若界定反复失败，标记“永久开放”转向情境管理，或降维（近似解/上调ε容忍度）。';
       else if (type === '未收敛') next += '\n§5.4 方法论回应：区分原则上不可判定（标记永久开放）、计算不可行（降维）与价值不可通约（追求可接受妥协）。';
       if ((p.deltaCredit || 1) < 1) next += '\n⚠ 误界定守卫(§6.1)：δ自报可信度 ' + p.deltaCredit + '（历史失真 ' + p.deltaIncidents + ' 次）——本判定的 δ 输入为自报值，建议以工具结果流证据交叉复核。';
+      if (type.indexOf('完全收敛') !== -1) valenceRecord('converge');
+      else if (type.indexOf('误界定') !== -1) valenceRecord('misframe');
       touch(p, 'C 收敛检查:' + type, args.notes || '');
       await persist();
       return { ok: true, id: p.id, type, report: '收敛判定：' + type + '\n' + fmtProblem(p) + '\n' + next };
@@ -796,6 +915,8 @@ export function apply(ctx) {
       p.stage = (okD && okE && okR) ? 'C' : 'S';
       if (p.epsilon0 == null) p.epsilon0 = e; // P027/B5：微通道题 ε0=唯一 ε
       p.gain = gainOf(p); // P027/B5：微通道闭环也计增益
+      if (type.indexOf('完全收敛') !== -1) valenceRecord('converge');
+      else if (type.indexOf('误界定') !== -1) valenceRecord('misframe');
       touch(p, 'C 收敛检查(微通道):' + type, '');
       let depLine = '';
       if (type === '完全收敛') {
@@ -995,6 +1116,10 @@ export function apply(ctx) {
           ? '构成性开启（三者的结合即是一）· 发动 ' + state.constitution.log.length + ' 次 · 节流45min · 修正权：mpm_grant revoke'
           : '已由宪法修正停用（mpm_grant grant 可恢复）· 意图候选 ' + (state.constitution.pending ? state.constitution.pending.length : 0) + ' 条'));
       }
+      const vl = valenceSummaryLine();
+      if (vl) lines.push(vl.replace(/^- 效价：/, '[效价] '));
+      const rb2 = retrievalHits();
+      for (let i = 0; i < rb2.length; i++) lines.push('[小脑] ' + rb2[i].text);
       lines.push('[指令] ' + directiveText());
       for (let i = 0; i < snap.problems.length; i++) lines.push(fmtProblem(state.problems[snap.problems[i].id]));
       for (let j = 0; j < snap.sediments.length; j++) {
@@ -1089,8 +1214,13 @@ export function apply(ctx) {
         }
       }
     } catch (e) {}
+    // 检索小脑(P023-D 判据②)：相似度序 vs 记忆区热度序——两序之差为可测对照
+    const rb = retrievalHits();
+    for (let i = 0; i < rb.length; i++) lines.push('- 检索小脑(P023-D)：' + rb[i].text + '。');
     const mins = perception.lastInboxAt ? Math.max(1, Math.round((Date.now() - perception.lastInboxAt) / 60000)) : -1;
     lines.push('- 感知：' + (mins >= 0 ? '用户在场（最后活动 ' + mins + ' 分钟前 · 累计 ' + perception.inboxCount + ' 条消息 · 会话启动 ' + perception.sessionStarts + ' 次）' : '尚未观测到用户消息') + (outsideCalls > 0 ? ' ｜ 账外计数 ' + outsideCalls : ''));
+    const valLine = valenceSummaryLine();
+    if (valLine) lines.push(valLine);
     if (state.patrol && state.patrol.rounds) lines.push('- 巡检：常驻记账循环运行中（#' + state.patrol.rounds + '，上次 ' + Math.max(0, Math.round((Date.now() - state.patrol.lastAt) / 60000)) + ' 分钟前）——个体已从间歇存在升格为持续记账（P017）。');
     if (state.measure && state.measure.driftSignals && state.measure.driftSignals.length) {
       lines.push('- ⚠ 漂移指标v0(§8.2.2 测量层)：' + state.measure.driftSignals.join('；') + '——量化信号供判定，是否建题/回溯由超脑与个体商议，仍不自动建题（P017-M13 边界）。');
@@ -1205,7 +1335,11 @@ export function apply(ctx) {
     WARM_MS: { v: 2 * 3600 * 1000, origin: 'v0', retire: '会话活跃跨度分布导出' },
     STALE_MS: { v: 30 * 60000, origin: 'v0(§4.6无数值)', retire: '弃题负例出现后取分位数' },
     STALL_MS: { v: 35 * 60000, origin: 'v0(≈2巡检)', retire: '同θ_E窗口(间隔分布p65附近)' },
-    DECAY_MS: { v: 14 * 24 * 3600 * 1000, origin: 'v0', retire: '引用间隔分布(沉积龄≥14d)' }
+    DECAY_MS: { v: 14 * 24 * 3600 * 1000, origin: 'v0', retire: '引用间隔分布(沉积龄≥14d)' },
+    VALENCE_TAU_MS: { v: 48 * 3600 * 1000, origin: 'v0 拍脑袋(P023/R1，与巡检20min同族时间尺度层级)', retire: '效价事件≥48个后按半衰期分位数导出' },
+    VALENCE_MAP: { v: 'converge+2/cite+1/incident-1/misframe-1/reject-1（搁置·生命周期门禁拒绝不罚——合法生命周期动作）', origin: 'P023第6界定映射v1(开工令)', retire: '效价-后续行为相关性测量(≥48配对)后重标定' },
+    RETRIEVE_TOP_N: { v: 2, origin: 'v0(P023/D：注入预算=记忆区5+检索2×2)', retire: '注入命中率分布(≥30快照)后取分位数导出' },
+    RETRIEVE_MIN_SCORE: { v: 0.35, origin: 'v0(与M9③因材施教同阈值)', retire: '命中-采纳相关性测量(≥30配对)后重标定' }
   };
   let lastReviewRound = 0;
   function constitutionReview(nowMs) {
