@@ -431,7 +431,7 @@ export function apply(ctx) {
       if (sedHits.length) {
         const parts = [];
         for (let i = 0; i < sedHits.length; i++) parts.push(sedHits[i].ref.id + '(' + sedHits[i].score + ')');
-        out.push('与【' + top.id + '】相似的沉积 ' + parts.join('·') + '——全文按需读取（.mpm/deposits/）');
+        out.push({ text: '与【' + top.id + '】相似的沉积 ' + parts.join('·') + '——全文按需读取（.mpm/deposits/）' });
       }
       const probCorpus = [];
       for (const k in state.problems) {
@@ -443,7 +443,7 @@ export function apply(ctx) {
       if (probHits.length) {
         const parts = [];
         for (let i = 0; i < probHits.length; i++) parts.push(probHits[i].ref.id + ' ' + String(probHits[i].ref.title).slice(0, 40) + '(' + probHits[i].score + ')');
-        out.push('与【' + top.id + '】相似的历史经验 ' + parts.join('·') + '——同类 framing/沉积可复用');
+        out.push({ text: '与【' + top.id + '】相似的历史经验 ' + parts.join('·') + '——同类 framing/沉积可复用' });
       }
     } catch (e) {}
     return out;
