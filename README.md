@@ -57,6 +57,8 @@ curl -fsSL https://raw.githubusercontent.com/NBagent-dev/metaflywheel/main/insta
 ~/.dsh/mpm/cordis.patch.user.yml # 见 install/cordis.patch.user.example.yml
 ```
 
+> 引擎更新（拉取新版本或本仓改动）后，运行 `powershell -ExecutionPolicy Bypass -File install/sync-engine.ps1` 一键同步仓库版到运行目录（自动备份旧副本），然后重启 DSH 生效——防止「重启了但没更新」。
+
 2. 组合补丁（模板见 [install/cordis.patch.user.example.yml](install/cordis.patch.user.example.yml)）：
 
 ```yaml
