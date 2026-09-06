@@ -11,6 +11,7 @@
 // "cannot get property X without inject" and fails the whole boot.
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { STAGE_NAMES, PHI_MARKS, phiOf, bigrams, revisionOf, relAgo } from "./modules/util.mjs";
+import { sedimentCacheGet, retrievalHits } from "./modules/retrieval.mjs";
 
 export const name = "mpm-flywheel";
 export const inject = ["systemPrompt", "tools", "fs", "sandboxPolicy", "timer"];
@@ -349,85 +350,7 @@ export function apply(ctx) {
   // 语料纪律沿用 P027/A4（DF>40% 的领域通用词不计入，有效重叠≥2 才算命中）。
   // 判据②"与全量快照对照差异可测"：记忆区按引用数排序（热度序），检索区按相似度排序
   // （任务相关序）并附命中分——两序之差即对照证据。v2 可与 M9③ 去重合并。
-  const RETRIEVE_TOP_N = 2;
-  const RETRIEVE_MIN_SCORE = 0.35; // 与 M9③ 因材施教同阈值（v0）
-  // P073 缓存面②：沉积语料索引——沉积物熵屏障 ⇒ 标题/标签语料不可变（cites 变更不进语料，无需失效）。
-  // 键=沉积条数+末条 id（append-only 内容指纹）；衍生两套 bigram 集（标题-only 供 M9③ / 标题+标签 供检索小脑）+ 两套 DF。
-  let sedCorpusCache = { key: '', dfTitle: {}, dfRet: {}, total: 0, items: [] };
-  function sedimentCacheGet() {
-    const key = state.sediments.length + ':' + (state.sediments.length ? state.sediments[state.sediments.length - 1].id : '');
-    if (sedCorpusCache.key === key) return sedCorpusCache;
-    const items = [];
-    const seenT = {}, seenR = {};
-    const dfTitle = {}, dfRet = {};
-    for (let i = 0; i < state.sediments.length; i++) {
-      const s = state.sediments[i];
-      const titleSet = bigrams(s.title);
-      const retSet = bigrams(s.title + ' ' + (s.tags || []).join(' '));
-      items.push({ ref: s, titleSet: titleSet, retSet: retSet });
-      for (const g of titleSet) if (!seenT[g]) { seenT[g] = true; dfTitle[g] = (dfTitle[g] || 0) + 1; }
-      for (const g of retSet) if (!seenR[g]) { seenR[g] = true; dfRet[g] = (dfRet[g] || 0) + 1; }
-    }
-    sedCorpusCache = { key: key, dfTitle: dfTitle, dfRet: dfRet, total: items.length, items: items };
-    return sedCorpusCache;
-  }
-  function retrieveTop(queryText, topN, minScore) {
-    try {
-      const Q = bigrams(queryText);
-      const C = sedimentCacheGet();
-      const out = [];
-      for (let i = 0; i < C.items.length; i++) {
-        const it = C.items[i];
-        let inter = 0, eff = 0;
-        for (const g of it.retSet) {
-          if (C.dfRet[g] && C.total && C.dfRet[g] / C.total > 0.4) continue;
-          eff += 1;
-          if (Q.has(g)) inter += 1;
-        }
-        const score = eff ? inter / eff : 0;
-        if (score >= minScore && inter >= 2) out.push({ ref: it.ref, score: Math.round(score * 100) / 100 });
-      }
-      out.sort(function (a, b) { return b.score - a.score; });
-      return out.slice(0, topN);
-    } catch (e) { return []; }
-  }
-  function topActiveProblem() {
-    let top = null;
-    for (const k in state.problems) {
-      const p = state.problems[k];
-      if ((p.stage === 'S' || p.stage === 'F' || p.stage === 'C') && (!top || p.updatedAt > top.updatedAt)) top = p;
-    }
-    return top;
-  }
-  function retrievalHits() {
-    // 返回 [{text}]——内容行，前缀由调用方决定（快照'- 检索小脑(P023-D)：'/状态视图'[小脑] '）
-    const out = [];
-    try {
-      const top = topActiveProblem();
-      if (!top) return out;
-      const query = top.title + ' ' + String(top.framing || '');
-      // P073：语料（title+tags, P027/A4 契约）由沉积缓存面提供，不再每轮重建
-      const sedHits = retrieveTop(query, RETRIEVE_TOP_N, RETRIEVE_MIN_SCORE);
-      if (sedHits.length) {
-        const parts = [];
-        for (let i = 0; i < sedHits.length; i++) parts.push(sedHits[i].ref.id + '(' + sedHits[i].score + ')');
-        out.push({ text: '与【' + top.id + '】相似的沉积 ' + parts.join('·') + '——全文按需读取（.mpm/deposits/）' });
-      }
-      const probCorpus = [];
-      for (const k in state.problems) {
-        const p = state.problems[k];
-        if (p.id === top.id) continue;
-        if (p.stage === 'C' || p.stage === 'D' || p.stage === 'E') probCorpus.push({ text: p.title + ' ' + String(p.framing || '').slice(0, 120), ref: p });
-      }
-      const probHits = retrieveTop(query, probCorpus, RETRIEVE_TOP_N, RETRIEVE_MIN_SCORE);
-      if (probHits.length) {
-        const parts = [];
-        for (let i = 0; i < probHits.length; i++) parts.push(probHits[i].ref.id + ' ' + String(probHits[i].ref.title).slice(0, 40) + '(' + probHits[i].score + ')');
-        out.push({ text: '与【' + top.id + '】相似的历史经验 ' + parts.join('·') + '——同类 framing/沉积可复用' });
-      }
-    } catch (e) {}
-    return out;
-  }
+  // 检索实现已迁 engine/modules/retrieval.mjs（P079 r2；含 P073 签名错位修复）
   function newProblem(title, observation, evokedBy) {
     state.seq += 1;
     const id = 'P' + String(state.seq).padStart(3, '0');
@@ -1103,7 +1026,7 @@ export function apply(ctx) {
       }
       const vl = valenceSummaryLine();
       if (vl) lines.push(vl.replace(/^- 效价：/, '[效价] '));
-      const rb2 = retrievalHits();
+      const rb2 = retrievalHits(state);
       for (let i = 0; i < rb2.length; i++) lines.push('[小脑] ' + rb2[i].text);
       lines.push('[指令] ' + directiveText());
       for (let i = 0; i < snap.problems.length; i++) lines.push(fmtProblem(state.problems[snap.problems[i].id]));
@@ -1206,7 +1129,7 @@ export function apply(ctx) {
         const T = bigrams(top.title + ' ' + (top.framing || ''));
         // P027/A4 语料 DF 过滤（>40% 领域通用词不计入，有效重叠≥2 才算命中——P023 实证修复）；
         // P073：DF/语料改走沉积缓存面（相同喂料），不再每轮全量重算。
-        const Cc = sedimentCacheGet();
+        const Cc = sedimentCacheGet(state.sediments);
         const df = Cc.dfTitle;
         const sedTotal = Cc.total;
         let best = null, bestScore = 0;
@@ -1229,7 +1152,7 @@ export function apply(ctx) {
       }
     } catch (e) {}
     // 检索小脑(P023-D 判据②)：相似度序 vs 记忆区热度序——两序之差为可测对照
-    const rb = retrievalHits();
+    const rb = retrievalHits(state);
     for (let i = 0; i < rb.length; i++) lines.push('- 检索小脑(P023-D)：' + rb[i].text + '。');
     const mins = perception.lastInboxAt ? Math.max(1, Math.round((Date.now() - perception.lastInboxAt) / 60000)) : -1;
     lines.push('- 感知：' + (mins >= 0 ? '用户在场（最后活动 ' + mins + ' 分钟前 · 累计 ' + perception.inboxCount + ' 条消息 · 会话启动 ' + perception.sessionStarts + ' 次）' : '尚未观测到用户消息') + (outsideCalls > 0 ? ' ｜ 账外计数 ' + outsideCalls : ''));
