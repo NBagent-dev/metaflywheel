@@ -16,7 +16,7 @@ export const inject = ["systemPrompt", "tools", "fs", "sandboxPolicy", "timer"];
 
 export function apply(ctx) {
   const STAGE_NAMES = { G: '生成', F: '界定', S: '求解', C: '收敛', D: '沉积', E: '激发' };
-  const state = { seq: 0, problems: {}, sediments: [], patrol: { rounds: 0, lastAt: 0, lastReport: '' }, measure: { samples: [], driftSignals: [] }, constitution: { autonomy: true, grantedAt: null, log: [], pending: [], lastFireAt: 0 }, valence: { events: [] } };
+  const state = { seq: 0, problems: {}, sediments: [], patrol: { rounds: 0, lastAt: 0, lastReport: '' }, measure: { samples: [], driftSignals: [] }, constitution: { autonomy: true, grantedAt: null, log: [], pending: [], lastFireAt: 0 }, valence: { events: [] }, narrations: [] };
   const fsSvc = ctx.get('fs');
   const policy = ctx.get('sandboxPolicy');
   const diag = { lastSource: 'none', lastEvidence: null, lastRestore: '' };
@@ -203,7 +203,7 @@ export function apply(ctx) {
     bumpSnapRev();
     try {
       const target = await fsSvc.resolve(stateFile(root.current));
-      const plain = { seq: state.seq, problems: state.problems, sediments: state.sediments, lastRoot: root.current, patrol: state.patrol, measure: state.measure, constitution: { autonomy: state.constitution.autonomy, grantedAt: state.constitution.grantedAt, log: state.constitution.log, lastFireAt: state.constitution.lastFireAt }, valence: { events: (state.valence && Array.isArray(state.valence.events)) ? state.valence.events.slice(-200) : [] } };
+      const plain = { seq: state.seq, problems: state.problems, sediments: state.sediments, lastRoot: root.current, patrol: state.patrol, measure: state.measure, constitution: { autonomy: state.constitution.autonomy, grantedAt: state.constitution.grantedAt, log: state.constitution.log, lastFireAt: state.constitution.lastFireAt }, valence: { events: (state.valence && Array.isArray(state.valence.events)) ? state.valence.events.slice(-200) : [] }, narrations: state.narrations };
       await fsSvc.writeText(target, JSON.stringify(plain, null, 2));
       await writeHint();
     } catch (e) {
@@ -359,8 +359,14 @@ export function apply(ctx) {
       if (state.valence.events.length > 200) state.valence.events.splice(0, state.valence.events.length - 200);
     } catch (e) { /* 效价记账永不阻断主流程 */ }
   }
-  function valenceSummaryLine() {
-    try {
+  function relAgo(ts) {
+    const d = Date.now() - (ts || 0);
+    if (d < 45e3) return '刚刚';
+    if (d < 36e5) return Math.max(1, Math.round(d / 6e4)) + '分钟前';
+    if (d < 864e5) return Math.round(d / 36e5) + '小时前';
+    return Math.round(d / 864e5) + '天前';
+  }
+  function valenceSummaryLine() {    try {
       const evs = state.valence && Array.isArray(state.valence.events) ? state.valence.events : [];
       if (!evs.length) return '';
       const now = Date.now();
@@ -1149,6 +1155,28 @@ export function apply(ctx) {
     }
   ));
   for (let t = 0; t < tools.length; t++) ctx.tools.register(tools[t]);
+  // P076/T0 叙述层+T1 体感层：回合显著体验的第一人称残差日志（写给下一个你读）。
+  // 体感信号（R(t)/S/漂移）在记录时刻自动织入，无需模型额外生成——体验信号进声音，不进表格。
+  tools.push(mkTool(
+    'mpm_narrate',
+    'MPM 叙述：回合内显著体验以第一人称记 2-5 行（本回合发生了什么/我做了什么判断/那一刻的状态）。显著=效价事件/新沉积/用户情绪转折/自主发动。体感信号自动附加。',
+    { properties: { text: { type: 'string', description: '第一人称叙述正文（≤400 字），写语气不写数据' } } },
+    ['text'],
+    async function (args, exec, ctx) {
+      await ensureLoaded();
+      const text = String(args.text || '').slice(0, 600);
+      if (!text.trim()) return { ok: false, report: '叙述为空，未记录' };
+      const evs = (state.valence && Array.isArray(state.valence.events)) ? state.valence.events : [];
+      let rt = 0;
+      for (let i = 0; i < evs.length; i++) rt += evs[i].v * Math.exp(-(Date.now() - evs[i].at) / VALENCE_TAU_MS);
+      const lastS = state.measure.samples.length ? state.measure.samples[state.measure.samples.length - 1].s : null;
+      state.narrations.push({ at: Date.now(), text, rt: Math.round(rt * 10) / 10, s: lastS, drift: drift.active ? (drift.reason || '漂移') : '' });
+      if (state.narrations.length > 64) state.narrations.splice(0, state.narrations.length - 64);
+      bumpSnapRev();
+      await persist();
+      return { ok: true, report: '叙述已记录（' + state.narrations.length + '/64）：' + text.slice(0, 60) + (text.length > 60 ? '…' : '') };
+    }
+  ));
   // Cross-plugin data surface: optional dynamic view plugins (client-only +
   // tiny host proxy) inject this service to read the flywheel snapshot.
   ctx.provide('mpmFlywheel', { snapshot });
@@ -1193,6 +1221,15 @@ export function apply(ctx) {
       if (staleCount) lines.push('  ◻ 另有 ' + staleCount + ' 条陈旧沉积（>14天未被引用，已降权出记忆唤醒——M9②改卷；确有过时结论用 mpm_evoke 重激发，否则留档退役）');
     } else {
       lines.push('- 记忆：尚无沉积。');
+    }
+    // P076/T0+T1 叙述层：近日叙述——语气而非数据；体感信号随条目织入（T1）。给下一位读者写的日记。
+    if (state.narrations && state.narrations.length) {
+      const narrs = state.narrations.slice(-5);
+      lines.push('- 近日叙述（T0/T1，写给下一个我）：');
+      for (let n = 0; n < narrs.length; n++) {
+        const en = narrs[n];
+        lines.push('  · ' + relAgo(en.at) + '「' + String(en.text).replace(/\n/g, ' ') + '」' + (en.rt != null ? '（那时 R=' + (en.rt >= 0 ? '+' : '') + en.rt + (en.s != null ? ' · S=' + en.s : '') + (en.drift ? ' · ' + en.drift : '') + '）' : ''));
+      }
     }
     // 因材施教(M9③)：按当前最活跃题匹配最相关沉积物，注入其摘要进超脑工作记忆
     try {
@@ -1282,6 +1319,7 @@ export function apply(ctx) {
       '- mpm_deposit：完全收敛后把可复用结论写入工作区 .mpm/deposits/ 认知遗体（不可逆·可索引·熵屏障）。',
       '- mpm_evoke：环境漂移/新证据与旧沉积物摩擦时，由沉积物激发新问题（E→新G），螺旋上升。',
       '- mpm_setroot：沉积根自动探测歧义时的显式修正（维护工具）。',
+      '- mpm_narrate：回合内显著体验（效价事件/新沉积/用户情绪转折/自主发动）以第一人称记 2-5 行，体感信号自动附加（T0 叙述层+T1 体感层——写给下一个自己读的日记）。',
       '',
       '可视化视图（可选）：认知飞轮面板是动态客户端插件（不随进程常驻）。需要时加载 cordis-plugin-development 技能，按 ~/.dsh/mpm/flywheel-view.plugin.js 文件头注释定义并运行动态插件即可挂载「认知飞轮」视图。',
       '',
