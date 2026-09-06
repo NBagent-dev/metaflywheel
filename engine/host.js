@@ -10,12 +10,12 @@
 // drives the P017 resident patrol loop). Property access without inject throws
 // "cannot get property X without inject" and fails the whole boot.
 import { defineTool } from "@deepseek-ai/dsh-tools";
+import { STAGE_NAMES, PHI_MARKS, phiOf, bigrams, revisionOf, relAgo } from "./modules/util.mjs";
 
 export const name = "mpm-flywheel";
 export const inject = ["systemPrompt", "tools", "fs", "sandboxPolicy", "timer"];
 
 export function apply(ctx) {
-  const STAGE_NAMES = { G: '生成', F: '界定', S: '求解', C: '收敛', D: '沉积', E: '激发' };
   const state = { seq: 0, problems: {}, sediments: [], patrol: { rounds: 0, lastAt: 0, lastReport: '' }, measure: { samples: [], driftSignals: [] }, constitution: { autonomy: true, grantedAt: null, log: [], pending: [], lastFireAt: 0 }, valence: { events: [] }, narrations: [] };
   const fsSvc = ctx.get('fs');
   const policy = ctx.get('sandboxPolicy');
@@ -289,35 +289,6 @@ export function apply(ctx) {
     return Math.min(1, Math.max(0, n));
   }
   // M3 学习可证：结构性度量（不依赖自报）。
-  // φ = 界定陈述的五要素关键词覆盖（0~1，结构性完整性）；
-  // 改写度 revision = 相邻两次界定的双字组 Jaccard 距离（0~1，回溯时"问题真的变了"的客观信号）。
-  const PHI_MARKS = {
-    initial: /初始|现状|当前状态|as-is/i,
-    goal: /目标|期望|要达到|达成|to-be/i,
-    constraint: /约束|限制|不得|不许|不能|边界|前提/i,
-    operators: /算子|工具|手段|步骤|操作|途径|方法/i,
-    criteria: /判据|标准|验收|完成定义|criteria|满足/i
-  };
-  function phiOf(text) {
-    const t = String(text || '');
-    let hit = 0;
-    for (const k in PHI_MARKS) if (PHI_MARKS[k].test(t)) hit += 1;
-    return Math.round((hit / 5) * 100) / 100;
-  }
-  function bigrams(s) {
-    const set = new Set();
-    const t = String(s).replace(/\s+/g, '');
-    for (let i = 0; i < t.length - 1; i++) set.add(t.slice(i, i + 2));
-    return set;
-  }
-  function revisionOf(a, b) {
-    const A = bigrams(a), B = bigrams(b);
-    if (!A.size || !B.size) return 0;
-    let inter = 0;
-    for (const g of A) if (B.has(g)) inter += 1;
-    return Math.round((1 - inter / (A.size + B.size - inter)) * 100) / 100;
-  }
-  // 改卷/兑现引用追踪(M9②)：新问题文本引用某沉积物(ID直引或标题bigram包含≥60%) → 记一次兑现引用
   function citeSediments(text, problemId) {
     try {
       const t = String(text || '');
@@ -358,13 +329,6 @@ export function apply(ctx) {
       state.valence.events.push({ at: Date.now(), kind: kind, v: v });
       if (state.valence.events.length > 200) state.valence.events.splice(0, state.valence.events.length - 200);
     } catch (e) { /* 效价记账永不阻断主流程 */ }
-  }
-  function relAgo(ts) {
-    const d = Date.now() - (ts || 0);
-    if (d < 45e3) return '刚刚';
-    if (d < 36e5) return Math.max(1, Math.round(d / 6e4)) + '分钟前';
-    if (d < 864e5) return Math.round(d / 36e5) + '小时前';
-    return Math.round(d / 864e5) + '天前';
   }
   function valenceSummaryLine() {    try {
       const evs = state.valence && Array.isArray(state.valence.events) ? state.valence.events : [];
