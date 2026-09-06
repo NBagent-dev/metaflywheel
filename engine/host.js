@@ -17,6 +17,7 @@ import { fmtProblem as fmtProblemCore, buildSnapshot, directiveText as directive
 import { VALENCE_TAU_MS, valenceRecord as valenceRecordCore, valenceSummaryLine as valenceSummaryLineCore } from "./modules/valence.mjs";
 import { makeBoundaryGuard } from "./modules/guard.mjs";
 import { makeStateMachine } from "./modules/state.mjs";
+import { attachEventFaces } from "./modules/events.mjs";
 
 export const name = "mpm-flywheel";
 export const inject = ["systemPrompt", "tools", "fs", "sandboxPolicy", "timer"];
@@ -136,77 +137,10 @@ export function apply(ctx) {
   const BOUNDARY_THRESHOLD = 6;
   // θ_G 漂移检测(§4.1)：连续失败或同签名重复调用 → 漂移信号，自我快照携带警告
   const drift = { consecutiveErrors: 0, lastSignature: '', signatureRepeat: 0, active: false, reason: '' };
-  ctx.on('tools/result', function (exec, result) {
-    const name2 = exec && exec.name;
-    if (typeof name2 !== 'string' || name2.indexOf('mpm_') === 0) { outsideCalls = 0; return; }
-    const ids = Object.keys(state.problems);
-    let hasActive = false;
-    for (let i = 0; i < ids.length; i++) {
-      const p = state.problems[ids[i]];
-      if (isParked(p)) continue; // P027/A1：搁置题不吸收代谢、不构成在轮（openEnded 开放题仍算在轮——情境管理也是账上工作）
-      if (p.stage === 'G' || p.stage === 'F' || p.stage === 'S' || p.stage === 'C') hasActive = true;
-      if (p.stage === 'S') p.cost += 1;
-    }
-    try {
-      // v6.1 修复（测试二实测发现）：发射点为双参 (exec, result)，error 标志在 result 上
-      // （toolErrorResult: {isError:true, error:{message,...}}）——旧检测只看 exec，error 恒为假，θ_G 连续失败路径从未生效。
-      const err = !!(result && (result.isError || result.error)) || !!(exec && exec.error);
-      let sig = name2;
-      try { sig = name2 + '|' + JSON.stringify((exec && (exec.args || exec.input)) || {}).slice(0, 120); } catch (e) {}
-      if (err) { drift.consecutiveErrors += 1; drift.reason = '工具连续失败 ' + drift.consecutiveErrors + ' 次(' + name2 + ')'; }
-      else drift.consecutiveErrors = 0;
-      if (sig === drift.lastSignature) drift.signatureRepeat += 1;
-      else { drift.lastSignature = sig; drift.signatureRepeat = 0; }
-      // P027/B7 修复：同签名重复路径此前不写 reason → 快照出现空理由漂移警告（本会话实证）；
-      // 阈值由 2 对齐 M10③ 规格（≥3）。
-      if (drift.signatureRepeat >= 3) drift.reason = '同签名重复调用 ' + drift.signatureRepeat + ' 次(' + name2 + ')';
-      drift.active = drift.consecutiveErrors >= 3 || drift.signatureRepeat >= 3;
-      if (!drift.active) drift.reason = '';
-      // P019 v6 瞬时审议：θ_G 漂移信号产生的当下即形成意图并尝试发动（不等下一次巡检）
-      if (drift.active) deliberate([drift.reason], Date.now());
-    } catch (e) {}
-    outsideCalls = hasActive ? 0 : outsideCalls + 1;
-    bumpSnapRev(); // P073：drift/代谢变更即快照修订
-  });
   // ── 接管层：运动神经（硬门禁）+ 感官（事件感知）+ 策略源（指令）──
   const BLOCK_THRESHOLD = 12;
   const perception = { lastInboxAt: 0, inboxCount: 0, sessionStarts: 0, lastSessionStartAt: 0 };
   const lastActive = { agentId: '', at: 0 };
-  ctx.on('agent/inbox/claimed', function (payload) {
-    try {
-      const aid = payload && payload.agent && payload.agent.id;
-      if (aid) { lastActive.agentId = String(aid); lastActive.at = Date.now(); }
-    } catch (e) {}
-  });
-  ctx.on('agent/inbox/inserted', function () {
-    perception.lastInboxAt = Date.now();
-    perception.inboxCount += 1;
-    drift.consecutiveErrors = 0; drift.signatureRepeat = 0; drift.active = false; drift.reason = '';
-  });
-  ctx.on('agent/session-start', function (payload) {
-    perception.sessionStarts += 1;
-    perception.lastSessionStartAt = Date.now();
-    try {
-      const aid = payload && payload.agent && payload.agent.id;
-      if (aid) { lastActive.agentId = String(aid); lastActive.at = Date.now(); }
-    } catch (e) {}
-    // P021 冷时段意志 v1：睡眠期挂账的意图在醒来时即时交付（梦的延迟执行）。
-    // 会话启动=身体回暖信号；交付署名"睡眠期挂账"；节流与入账结构约束不变。
-    // P030/A1-v2 残余修复：挂账交付前过滤已搁置题的信号——实测旧信号重放
-    // （P024 已 PARKED 而其常数审计挂账仍于会话启动时交付）。规则：信号中引用的
-    // 题ID若全部处于搁置态则不交付；无题ID引用的信号（如宪法复审提案）照常交付。
-    const c = state.constitution;
-    if (c.autonomy && c.pending && c.pending.length) {
-      const sigAwake = function (s) {
-        if (!s || s.indexOf('（') === 0) return false;
-        const ids = s.match(/P\d{3}/g) || [];
-        if (!ids.length) return true;
-        return ids.some(function (id) { const q = state.problems[id]; return q && !isParked(q); });
-      };
-      const sigs = c.pending.map(function (p) { return p.signal; }).filter(sigAwake);
-      if (sigs.length) deliberate(sigs.map(function (s) { return '睡眠期挂账·' + s; }), Date.now());
-    }
-  });
   function directiveText() { return directiveTextCore({ state: state, isParked: isParked, isOpen: isOpen, outsideCalls: outsideCalls, BOUNDARY_THRESHOLD: BOUNDARY_THRESHOLD }); }
   const toolsSvc = ctx.get('tools');
   if (toolsSvc && typeof toolsSvc.guard === 'function') {
@@ -463,7 +397,17 @@ export function apply(ctx) {
       patrolling = false;
     }
   }
-  ctx.timeout(function () { runPatrol(); }, 8000);
-  ctx.interval(function () { runPatrol(); }, PATROL_MS);
+  // 事件面/感知层已迁 engine/modules/events.mjs（P079：tools/result 监听、inbox/session 感知、巡检定时器调度）。
+  // drift/perception/lastActive/outsideCalls 为宿主管状可变状态，仅传引用（模块闭包不重建）；outsideCalls 是 let。
+  attachEventFaces({
+    ctx: ctx, state: state, isParked: isParked,
+    drift: drift, perception: perception, lastActive: lastActive,
+    deliberate: deliberate,
+    getOutsideCalls: function () { return outsideCalls; },
+    setOutsideCalls: function (n) { outsideCalls = n; },
+    bumpSnapRev: bumpSnapRev,
+    patrol: function () { runPatrol(); },
+    PATROL_MS: PATROL_MS
+  });
   console.log('[mpm][engine] 认知飞轮引擎已挂载（组合行），初始沉积根: ' + (root.current || '(内存模式)'));
 }
