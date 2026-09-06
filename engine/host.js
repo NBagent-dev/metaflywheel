@@ -194,8 +194,13 @@ export function apply(ctx) {
       } catch (e) { console.error('[mpm][engine] 沉积迁移跳过 ' + s.id + ':', e && e.message ? e.message : e); }
     }
   }
+  // P073 缓存面③：快照修订号——每次状态 mutation 递增（persist/tools-result/deliberate 三处覆盖），
+  // snapshot() 按 rev 记忆化，同一 rev 的 RPC 轮询/工具读取零重复构建。
+  let snapRev = 0;
+  function bumpSnapRev() { snapRev += 1; }
   async function persist() {
     if (!fsSvc || !root.current) return;
+    bumpSnapRev();
     try {
       const target = await fsSvc.resolve(stateFile(root.current));
       const plain = { seq: state.seq, problems: state.problems, sediments: state.sediments, lastRoot: root.current, patrol: state.patrol, measure: state.measure, constitution: { autonomy: state.constitution.autonomy, grantedAt: state.constitution.grantedAt, log: state.constitution.log, lastFireAt: state.constitution.lastFireAt }, valence: { events: (state.valence && Array.isArray(state.valence.events)) ? state.valence.events.slice(-200) : [] } };
@@ -376,29 +381,41 @@ export function apply(ctx) {
   // （任务相关序）并附命中分——两序之差即对照证据。v2 可与 M9③ 去重合并。
   const RETRIEVE_TOP_N = 2;
   const RETRIEVE_MIN_SCORE = 0.35; // 与 M9③ 因材施教同阈值（v0）
-  function corpusDf(corpus) {
-    const df = {};
-    for (let i = 0; i < corpus.length; i++) {
-      const seen = {};
-      for (const g of bigrams(corpus[i].text)) { if (!seen[g]) { seen[g] = true; df[g] = (df[g] || 0) + 1; } }
+  // P073 缓存面②：沉积语料索引——沉积物熵屏障 ⇒ 标题/标签语料不可变（cites 变更不进语料，无需失效）。
+  // 键=沉积条数+末条 id（append-only 内容指纹）；衍生两套 bigram 集（标题-only 供 M9③ / 标题+标签 供检索小脑）+ 两套 DF。
+  let sedCorpusCache = { key: '', dfTitle: {}, dfRet: {}, total: 0, items: [] };
+  function sedimentCacheGet() {
+    const key = state.sediments.length + ':' + (state.sediments.length ? state.sediments[state.sediments.length - 1].id : '');
+    if (sedCorpusCache.key === key) return sedCorpusCache;
+    const items = [];
+    const seenT = {}, seenR = {};
+    const dfTitle = {}, dfRet = {};
+    for (let i = 0; i < state.sediments.length; i++) {
+      const s = state.sediments[i];
+      const titleSet = bigrams(s.title);
+      const retSet = bigrams(s.title + ' ' + (s.tags || []).join(' '));
+      items.push({ ref: s, titleSet: titleSet, retSet: retSet });
+      for (const g of titleSet) if (!seenT[g]) { seenT[g] = true; dfTitle[g] = (dfTitle[g] || 0) + 1; }
+      for (const g of retSet) if (!seenR[g]) { seenR[g] = true; dfRet[g] = (dfRet[g] || 0) + 1; }
     }
-    return { df: df, total: corpus.length };
+    sedCorpusCache = { key: key, dfTitle: dfTitle, dfRet: dfRet, total: items.length, items: items };
+    return sedCorpusCache;
   }
-  function retrieveTop(queryText, corpus, topN, minScore) {
+  function retrieveTop(queryText, topN, minScore) {
     try {
       const Q = bigrams(queryText);
-      const d = corpusDf(corpus);
+      const C = sedimentCacheGet();
       const out = [];
-      for (let i = 0; i < corpus.length; i++) {
-        const B = bigrams(corpus[i].text);
+      for (let i = 0; i < C.items.length; i++) {
+        const it = C.items[i];
         let inter = 0, eff = 0;
-        for (const g of B) {
-          if (d.df[g] && d.total && d.df[g] / d.total > 0.4) continue;
+        for (const g of it.retSet) {
+          if (C.dfRet[g] && C.total && C.dfRet[g] / C.total > 0.4) continue;
           eff += 1;
           if (Q.has(g)) inter += 1;
         }
         const score = eff ? inter / eff : 0;
-        if (score >= minScore && inter >= 2) out.push({ ref: corpus[i].ref, score: Math.round(score * 100) / 100 });
+        if (score >= minScore && inter >= 2) out.push({ ref: it.ref, score: Math.round(score * 100) / 100 });
       }
       out.sort(function (a, b) { return b.score - a.score; });
       return out.slice(0, topN);
@@ -419,15 +436,8 @@ export function apply(ctx) {
       const top = topActiveProblem();
       if (!top) return out;
       const query = top.title + ' ' + String(top.framing || '');
-      const sedCorpus = [];
-      for (let i = 0; i < state.sediments.length; i++) {
-        const s = state.sediments[i];
-        // 语料 v1.2 = M9③ 产线契约逐字镜像：title+tags（digest 只做资格过滤不进语料）。
-        // v1.1 实测教训：digest 进语料使 eff 从~20 涨到~150，inter/eff 全体稀释到阈值之下——
-        // 语料密度是 M9③ 0.35 阈值成立的前提，不可违背。
-        sedCorpus.push({ text: s.title + ' ' + (s.tags || []).join(' '), ref: s });
-      }
-      const sedHits = retrieveTop(query, sedCorpus, RETRIEVE_TOP_N, RETRIEVE_MIN_SCORE);
+      // P073：语料（title+tags, P027/A4 契约）由沉积缓存面提供，不再每轮重建
+      const sedHits = retrieveTop(query, RETRIEVE_TOP_N, RETRIEVE_MIN_SCORE);
       if (sedHits.length) {
         const parts = [];
         for (let i = 0; i < sedHits.length; i++) parts.push(sedHits[i].ref.id + '(' + sedHits[i].score + ')');
@@ -485,7 +495,9 @@ export function apply(ctx) {
       (p.phi == null ? '' : ' φ=' + p.phi) +
       '｜第' + p.iteration + '次界定(回溯' + p.reentries + (p.lastRevision == null ? '' : '·改写' + p.lastRevision) + ')｜代价C=' + p.cost + (isParked(p) ? '｜PARKED(搁置)' : '') + (p.openEnded ? '｜OPEN(' + p.openEnded.kind + ')' : '');
   }
+  let snapMemo = { rev: -1, data: null }; // P073：快照按 rev 记忆化，同一修订号零重复构建
   function snapshot() {
+    if (snapMemo.rev === snapRev) return snapMemo.data;
     const ids = Object.keys(state.problems);
     const list = [];
     const byStage = { G: 0, F: 0, S: 0, C: 0, D: 0, E: 0 };
@@ -513,7 +525,7 @@ export function apply(ctx) {
       const p2 = state.problems[ids[i]];
       if (p2.lastRevision != null && p2.lastRevision >= 0.3 && (p2.stage === 'C' || p2.stage === 'D' || p2.stage === 'E')) learnt += 1;
     }
-    return {
+    const out = {
       problems: list,
       sediments: state.sediments.slice(-8).reverse(),
       stats: {
@@ -534,6 +546,8 @@ export function apply(ctx) {
       governance: { count: state.constitution.log.length, autonomy: state.constitution.autonomy },
       drift: { active: drift.active, reason: drift.reason }
     };
+    snapMemo = { rev: snapRev, data: out };
+    return out;
   }
   // M2 边界强制：区分账内/账外工作。有在轮题(G/F/S/C)→工具调用计入其代谢代价并清零账外计数；
   // 无在轮题→账外计数累加，超阈值后自我快照在下一次提示组装时自动携带边界警告（警告优先，不阻塞）。
@@ -571,6 +585,7 @@ export function apply(ctx) {
       if (drift.active) deliberate([drift.reason], Date.now());
     } catch (e) {}
     outsideCalls = hasActive ? 0 : outsideCalls + 1;
+    bumpSnapRev(); // P073：drift/代谢变更即快照修订
   });
   // ── 接管层：运动神经（硬门禁）+ 感官（事件感知）+ 策略源（指令）──
   const BLOCK_THRESHOLD = 12;
@@ -1147,14 +1162,18 @@ export function apply(ctx) {
     const lines = [];
     lines.push('## 我是谁（MPM 个体大脑 · 自我快照）');
     lines.push('个体=认知飞轮；LLM=本次被咨询的群体超脑（无状态）。以下由引擎在每次提示组装时实时生成，是个体在咨询前写下的自我。');
+    // P073 缓存面①注入塌缩：在轮身份只列 G/F/S + 新课 C（未沉积且<24h）——C/D/E 存量不再每轮注入
+    // （新鲜度需求低）；总量保在台账行，全文走 mpm_flywheel_state 按需调阅。
     const active = [];
+    let backlog = 0;
     for (let i = 0; i < ids.length; i++) {
       const p = state.problems[ids[i]];
-      if (p.stage === 'G' || p.stage === 'F' || p.stage === 'S' || p.stage === 'C') {
+      const freshC = p.stage === 'C' && !p.deposit && Date.now() - (p.updatedAt || 0) < 24 * 3600 * 1000;
+      if (p.stage === 'G' || p.stage === 'F' || p.stage === 'S' || freshC) {
         active.push('【' + p.id + '】' + p.title + ' @' + p.stage + '(δ=' + (p.delta == null ? '—' : p.delta) + ' ε=' + (p.epsilon == null ? '—' : p.epsilon) + ' C=' + p.cost + (p.deltaCredit != null && p.deltaCredit < 1 ? '，δ自报可信度' + p.deltaCredit : '') + ')' + (isParked(p) ? '·PARKED' : ''));
-      }
+      } else if (p.stage !== 'G' && p.stage !== 'F' && p.stage !== 'S') backlog += 1;
     }
-    lines.push('- 在轮身份：' + (active.length ? active.join('；') : '空转（静息态：感知到摩擦即 mpm_generate 建题）'));
+    lines.push('- 在轮身份：' + (active.length ? active.join('；') : '空转（静息态：感知到摩擦即 mpm_generate 建题）') + (backlog ? '（另有 ' + backlog + ' 题已结账/结算/存档——完整台账见 mpm_flywheel_state，按需调阅）' : ''));
     if (state.sediments.length) {
       const nowMs = Date.now();
       const STALE_MS = 14 * 24 * 3600 * 1000;
@@ -1184,22 +1203,16 @@ export function apply(ctx) {
       }
       if (top && state.sediments.length) {
         const T = bigrams(top.title + ' ' + (top.framing || ''));
-        // P027/A4：语料 DF 过滤——出现在 >40% 沉积物标题中的 bigram 视为领域通用词（如"智谱""GLM""API"），
-        // 不计入相关性；并要求有效重叠 ≥2——修复词面级匹配把弱相关沉积推成"最相关"的实证缺陷
-        // （本会话实发：为 P023 注入仅词面重合的 P026-M15）。
-        const df = {};
-        for (let d = 0; d < state.sediments.length; d++) {
-          const seen = {};
-          for (const g of bigrams(state.sediments[d].title)) {
-            if (!seen[g]) { seen[g] = true; df[g] = (df[g] || 0) + 1; }
-          }
-        }
-        const sedTotal = state.sediments.length;
+        // P027/A4 语料 DF 过滤（>40% 领域通用词不计入，有效重叠≥2 才算命中——P023 实证修复）；
+        // P073：DF/语料改走沉积缓存面（相同喂料），不再每轮全量重算。
+        const Cc = sedimentCacheGet();
+        const df = Cc.dfTitle;
+        const sedTotal = Cc.total;
         let best = null, bestScore = 0;
         for (let j = 0; j < state.sediments.length; j++) {
           const s = state.sediments[j];
           if (!s.digest) continue;
-          const B = bigrams(s.title + ' ' + (s.tags || []).join(' '));
+          const B = Cc.items[j] ? Cc.items[j].retSet : bigrams(s.title + ' ' + (s.tags || []).join(' '));
           let inter = 0, eff = 0;
           for (const g of B) {
             if (df[g] && sedTotal && df[g] / sedTotal > 0.4) continue;
@@ -1298,6 +1311,7 @@ export function apply(ctx) {
   function deliberate(sigList, nowMs) {
     try {
       const c = state.constitution;
+      bumpSnapRev(); // P073：执政挂账/发动即快照修订
       c.pending = sigList && sigList.length ? sigList.map(function (s) { return { at: nowMs, signal: s }; }) : [];
       if (!c.autonomy || !sigList || !sigList.length) return;
       const warm = lastActive.agentId && (nowMs - lastActive.at) < 2 * 3600 * 1000;
