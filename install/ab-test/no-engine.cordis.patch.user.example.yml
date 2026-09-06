@@ -1,0 +1,8 @@
+# MPM A/B 测试 · B 臂组合补丁（无引擎版）
+# 用法（见 install/ab-test/tasks.md 操作手册）：
+#   B 模式 = 把本文件内容替换 ~/.dsh/mpm/cordis.patch.user.yml → 重启 → 执行任务书
+#   A 模式 = 恢复原补丁（含 mpm-flywheel insert）→ 重启
+# 本版仅保留 agent-loop 配置段（会话连续性语义依赖），不含 MPM 引擎行。
+- id: agent-loop
+  config:
+    agentImplementation: demand
