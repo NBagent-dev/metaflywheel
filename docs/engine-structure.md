@@ -1,39 +1,42 @@
-# 引擎模块结构图（P079 重构 · 六轮中间态）
+# 引擎模块结构图（P079 重构 · 十轮达成态）
 
-> 状态：**部分完成**——6 个模块已迁出，apply 仍是组装闭包（≈1194 行）。续轮从本文档接续。
+> 状态：**主体完成**——10 个模块迁出，apply 薄层 ≈274 行组装+助手。剩余=薄层微调与 CodeCheck 复核。
 
-## 现状（2026-09-06，commit 28a23f9 后）
+## 现状（2026-09-06，commit 待 r10 落账）
 
 ```
 engine/
-  host.js               # file:// 插件行入口（export name/inject/apply）——仍为组装巨函数 ≈1194 LOC
+  host.js               # file:// 插件行入口（export name/inject/apply）≈274 LOC——state 声明+助手+装配+注册
   modules/
-    util.mjs            # 纯函数/常量：STAGE_NAMES PHI_MARKS phiOf bigrams revisionOf relAgo   (44 LOC)
-    retrieval.mjs       # 检索小脑：沉积缓存面 + 双通道命中（P073 bug 已修复）               (116 LOC)
-    selfsnap.mjs        # 自我快照渲染器 renderSelfSnapshot(deps)                            (123 LOC)
-    core.mjs            # buildSnapshot / directiveText / fmtProblem                          ( 91 LOC)
-    valence.mjs         # R1 效价账本（VALENCE_TAU_MS/KINDS/record/summaryLine）              ( 33 LOC)
-    guard.mjs           # M2 边界硬门禁 makeBoundaryGuard(deps)                              ( 22 LOC)
+    util.mjs            # 纯函数/常量（STAGE_NAMES/PHI_MARKS/phiOf/bigrams/revisionOf/relAgo）
+    retrieval.mjs       # 检索小脑（沉积缓存面+双通道，P073 bug 修复）
+    selfsnap.mjs        # 自我快照渲染 renderSelfSnapshot(deps)
+    core.mjs            # buildSnapshot/directiveText/fmtProblem
+    valence.mjs         # R1 效价账本
+    guard.mjs           # M2 边界硬门禁 makeBoundaryGuard(deps)
+    tools.mjs           # makeTools(deps×28)：mkTool+11 处理器+narrate
+    state.mjs           # makeStateMachine(e×9)：persist/restore/adoptRoot/迁移
+    events.mjs          # attachEventFaces(e×13)：tools/result+inbox+session+调度
+    patrol.mjs          # makePatrol(p×11)：runPatrol 测量/宪法复审/停滞/议程
 ```
 
-## 尚未模块化（apply 内剩余大块，按优先级）
+## 重构方法论（本工程实证，可复用）
 
-1. **mkTool 工具集**（≈500 行）：mkTool 工厂 + 11 个处理器（generate/frame/solve/converge/micro/deposit/evoke/setroot/grant/flywheel_state/narrate）——依赖最深，需要 deps 对象覆盖 ensureLoaded/adoptRoot/persist/diag/root/snapshot/deliberate/newProblem 等
-2. **measure/patrol/drift 事件面**（tools/result 监听、inbox 感知、session-start、巡检定时器、漂移状态机）≈250 行
-3. **state 生命周期**（restore/persist/adoptRoot/迁移）≈200 行
-4. entry 收薄：上述三块迁出后 apply 才真正变薄（目标 <300 行组装）
+1. **模块=纯逻辑+参数注入**；宿主只持有：可变状态声明、事件装配、周期轮（apply 薄层）
+2. **每迁一块**：node --check + 冒烟 5/5 → commit+双远端推送 → **同步运行副本**（sync-engine.ps1 整目录版）
+3. **迁移期逐行重读**是硬纪律——已借此抓住：P073 签名错位（检索历史经验通道静默失效）、citeSediments 重复函数头、模块未同步入库（重启即挂）
+4. 可委托子代理做机械抽取，父代理三层复核（语法/符号泄漏/残留定义）后提交
 
-## 续轮作业规则（防回归）
+## 本地复杂度代理（终态数据待 r10 采集）
 
-- 每迁一块：node --check 全部 + 冒烟 5/5 后 commit+双远端推送
-- 依赖注入模式沿用：模块纯逻辑 + 宿主薄包装转发（不把闭包传进模块）
-- 迁移期逐行重读（本轮已两次抓住静默退化：P073 签名错位、citeSediments 重复头）
-- 最终验收：本地分支密度表 + 华为云 CodeCheck 重跑（目标 avg CC <15）+ 用户重启验证快照/面板/叙事
-
-## 本地复杂度代理（本轮实测）
-
-| 文件 | LOC | 分支行 |
+| 指标 | 重构前 | 重构后 |
 |---|---|---|
-| host.js | 1194 | 255 |
-| modules 合计 | 429 | 98 |
-| 总计 | 1623 | 353 |
+| host.js LOC | 1530 | ≈274 |
+| host.js 分支行 | ≈314 | 待测 |
+| modules 文件数 | 0 | 10 |
+| 单函数平均圈复杂度 | 134.6（CodeCheck） | 待 CodeCheck 重跑 |
+
+## 收尾清单
+- [ ] CodeCheck 重跑（avg 圈复杂度 <15 目标判据）
+- [ ] 用户重启验证（快照/面板/叙述行为零回归）
+- [ ] 运行副本最终同步（已完成多轮，末次以本图 commit 后为准）
