@@ -112,14 +112,33 @@
 //     function warmthOf(s) { var v = clampS(s); if (v == null) return 0; return Math.max(0, Math.min(1, (v - 0.7) / 2.1)) }
 //     function speedOf(s) { var v = clampS(s); if (v == null) return 30; return Math.max(12, 42 - v * 9) + 's' }
 //     function moodOf(s) { var v = clampS(s); if (v == null) return ''; if (v < 1.5) return '平静'; if (v < 2.2) return '忙碌'; return '满负荷' }
+//     // P072 成本迭代：指纹门禁（无变化不 setState → 零重渲染）+ 自适应退避（无变化 2.5s→30s 封顶，变化复位）
 //     function useFlywheelState() {
 //       var s = React.useState(null), data = s[0], set = s[1]
 //       React.useEffect(function () {
 //         var alive = true
-//         function pull() { host.call('mpm/state', {}).then(function (v) { if (alive) set(v) }).catch(function () {}) }
+//         var BASE = 2500, MAXD = 30000
+//         var delay = BASE
+//         var lastSig = ''
+//         function sigOf(v) {
+//           if (!v || !v.problems) return ''
+//           var maxAt = 0
+//           for (var i = 0; i < v.problems.length; i++) if ((v.problems[i].updatedAt || 0) > maxAt) maxAt = v.problems[i].updatedAt
+//           return v.problems.length + '|' + maxAt + '|' + ((v.patrol || {}).rounds || 0) + '|' + ((v.governance || {}).count || 0) + '|' + (v.sediments ? v.sediments.length : 0) + '|' + ((v.measure || {}).lastS == null ? '' : v.measure.lastS)
+//         }
+//         var stop = null
+//         function schedule(ms) { if (stop) stop(); stop = ctx.interval(pull, ms) }
+//         function pull() {
+//           host.call('mpm/state', {}).then(function (v) {
+//             if (!alive) return
+//             var sig = sigOf(v)
+//             if (sig !== lastSig) { lastSig = sig; delay = BASE; set(v); schedule(delay) }
+//             else if (delay < MAXD) { delay = Math.min(delay * 2, MAXD); schedule(delay) }
+//           }).catch(function () {})
+//         }
 //         pull()
-//         var stop = ctx.interval(pull, 2500)
-//         return function () { alive = false; stop() }
+//         schedule(delay)
+//         return function () { alive = false; if (stop) stop() }
 //       }, [])
 //       return data
 //     }
