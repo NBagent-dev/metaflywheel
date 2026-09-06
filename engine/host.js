@@ -1154,7 +1154,6 @@ export function apply(ctx) {
       return { ok: true, report: lines.join('\n') };
     }
   ));
-  for (let t = 0; t < tools.length; t++) ctx.tools.register(tools[t]);
   // P076/T0 叙述层+T1 体感层：回合显著体验的第一人称残差日志（写给下一个你读）。
   // 体感信号（R(t)/S/漂移）在记录时刻自动织入，无需模型额外生成——体验信号进声音，不进表格。
   tools.push(mkTool(
@@ -1177,6 +1176,7 @@ export function apply(ctx) {
       return { ok: true, report: '叙述已记录（' + state.narrations.length + '/64）：' + text.slice(0, 60) + (text.length > 60 ? '…' : '') };
     }
   ));
+  for (let t = 0; t < tools.length; t++) ctx.tools.register(tools[t]);
   // Cross-plugin data surface: optional dynamic view plugins (client-only +
   // tiny host proxy) inject this service to read the flywheel snapshot.
   ctx.provide('mpmFlywheel', { snapshot });
