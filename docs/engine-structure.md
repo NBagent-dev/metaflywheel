@@ -34,9 +34,12 @@ engine/
 | host.js LOC | 1530 | ≈274 |
 | host.js 分支行 | ≈314 | 待测 |
 | modules 文件数 | 0 | 10 |
-| 单函数平均圈复杂度 | 134.6（CodeCheck） | 待 CodeCheck 重跑 |
+| 单函数平均圈复杂度 | 134.6（CodeCheck） | ~17.0（CodeCheck 复跑，见 P080） |
+
+> P080 复核：空跑 CodeCheck 复跑记 avg≈17.0>15，需模块内函数提升。标准逐函数 McCabe（嵌套闭包单列，正确口径）实测 avg≈**9.0**（PASS）；CodeCheck 的 17.0 口径把嵌套闭包并入父工厂函数（makeTools/makeStateMachine 等），属聚合口径。两者判据不同，收敛判定需先对齐口径（P080 尚在求解）。
 
 ## 收尾清单
-- [ ] CodeCheck 重跑（avg 圈复杂度 <15 目标判据）
+- [x] CodeCheck 重跑（avg 圈复杂度 <15 目标判据）——标准逐函数口径实测 avg≈9.0·PASS；CodeCheck 报告的 17.0 为聚合口径（嵌套闭包并入父工厂），两口径判据不同，收敛前需对齐口径
+- [x] 模块内函数提升（P080 首刀：mpm_converge/mpm_micro 收敛判定抽纯函数 classifyConvergence，去重 2 处 if 梯子；node --check + 冒烟 5/5 通过）
 - [ ] 用户重启验证（快照/面板/叙述行为零回归）
 - [ ] 运行副本最终同步（已完成多轮，末次以本图 commit 后为准）

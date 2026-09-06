@@ -1,6 +1,6 @@
 # MetaFlywheel
 
-![DSH Plugin](https://img.shields.io/badge/topic-dsh--plugin-2563eb) ![License](https://img.shields.io/badge/license-MIT-green) ![Bundle](https://img.shields.io/badge/DSH-bundle%20contract-0d9488) ![Tests](https://img.shields.io/badge/tests-4%2F4-passing-brightgreen) ![Version](https://img.shields.io/badge/version-0.1.1-blueviolet)
+![DSH Plugin](https://img.shields.io/badge/topic-dsh--plugin-2563eb) ![License](https://img.shields.io/badge/license-MIT-green) ![Bundle](https://img.shields.io/badge/DSH-bundle%20contract-0d9488) ![Tests](https://img.shields.io/badge/tests-5%2F5-passing-brightgreen) ![Version](https://img.shields.io/badge/version-0.3.0-blueviolet)
 
 **元问题建模（MPM）认知飞轮的 LLM 代理运行时实现**——把一篇问题方法论论文变成一个在你的 AI 代理进程里常驻运转、持续记账、自主审议的认知引擎。
 
