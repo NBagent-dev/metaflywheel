@@ -14,6 +14,8 @@ import { STAGE_NAMES, PHI_MARKS, phiOf, bigrams, revisionOf, relAgo } from "./mo
 import { sedimentCacheGet, retrievalHits } from "./modules/retrieval.mjs";
 import { renderSelfSnapshot } from "./modules/selfsnap.mjs";
 import { fmtProblem as fmtProblemCore, buildSnapshot, directiveText as directiveTextCore } from "./modules/core.mjs";
+import { VALENCE_TAU_MS, valenceRecord as valenceRecordCore, valenceSummaryLine as valenceSummaryLineCore } from "./modules/valence.mjs";
+import { makeBoundaryGuard } from "./modules/guard.mjs";
 
 export const name = "mpm-flywheel";
 export const inject = ["systemPrompt", "tools", "fs", "sandboxPolicy", "timer"];
@@ -317,36 +319,9 @@ export function apply(ctx) {
       return hit;
     } catch (e) { return []; }
   }
-  // ===== R1 效价账本（P023 工程半降维件①，2026-08-30 开工令）=====
-  // 在线效价信号——意识功能清单"效价格"的第一块（P023 第6界定）。事件→效价映射，
-  // R(t)=指数衰减和。τ=48h（P018 常数族 v0：与巡检20min/沉积衰减14d 同族，待测量史导出退役）。
-  // 映射 v1 诚实注记：搁置(parked)与生命周期门禁拒绝是合法生命周期动作，不罚——
-  // 罚分会惩罚智慧；负效价只计真实失真与违规。落盘搭下一次 persist() 顺风车（记账不阻塞主流程）。
-  const VALENCE_TAU_MS = 48 * 3600 * 1000;
-  const VALENCE_KINDS = { converge: 2, cite: 1, incident: -1, misframe: -1, reject: -1 };
-  function valenceRecord(kind) {
-    try {
-      const v = VALENCE_KINDS[kind];
-      if (v == null) return;
-      if (!state.valence || !Array.isArray(state.valence.events)) state.valence = { events: [] };
-      state.valence.events.push({ at: Date.now(), kind: kind, v: v });
-      if (state.valence.events.length > 200) state.valence.events.splice(0, state.valence.events.length - 200);
-    } catch (e) { /* 效价记账永不阻断主流程 */ }
-  }
-  function valenceSummaryLine() {    try {
-      const evs = state.valence && Array.isArray(state.valence.events) ? state.valence.events : [];
-      if (!evs.length) return '';
-      const now = Date.now();
-      let rt = 0, win = 0, pos = 0, neg = 0;
-      for (let i = 0; i < evs.length; i++) {
-        const e = evs[i];
-        rt += e.v * Math.exp(-(now - e.at) / VALENCE_TAU_MS);
-        if (now - e.at <= VALENCE_TAU_MS) { win += 1; if (e.v > 0) pos += 1; else if (e.v < 0) neg += 1; }
-      }
-      rt = Math.round(rt * 10) / 10;
-      return '- 效价：R(t)=' + (rt >= 0 ? '+' : '') + rt.toFixed(1) + '（近48h ' + win + ' 事件：正 ' + pos + ' · 负 ' + neg + '）——R1 效价账本 v1（P023），提示级强化数据源。';
-    } catch (e) { return ''; }
-  }
+  // 效价账本实现已迁 engine/modules/valence.mjs（P079 r5）
+  function valenceRecord(kind) { return valenceRecordCore(state, kind); }
+  function valenceSummaryLine() { return valenceSummaryLineCore(state); }
   // ===== D 检索小脑（P023 工程半降维件②，2026-08-30 开工令续）=====
   // 零训练程序性记忆器官：沉积+已结算账本 → bigram 相似度检索 → 按当前在轮题注入。
   // 语料纪律沿用 P027/A4（DF>40% 的领域通用词不计入，有效重叠≥2 才算命中）。
@@ -472,22 +447,8 @@ export function apply(ctx) {
   function directiveText() { return directiveTextCore({ state: state, isParked: isParked, isOpen: isOpen, outsideCalls: outsideCalls, BOUNDARY_THRESHOLD: BOUNDARY_THRESHOLD }); }
   const toolsSvc = ctx.get('tools');
   if (toolsSvc && typeof toolsSvc.guard === 'function') {
-    ctx.effect(() => toolsSvc.guard(function (execution) {
-      const name3 = execution && execution.name;
-      if (typeof name3 !== 'string' || name3.indexOf('mpm_') === 0) return undefined;
-      const ids = Object.keys(state.problems);
-      let hasActive = false;
-      for (let i = 0; i < ids.length; i++) {
-        const bp2 = state.problems[ids[i]];
-        if (isParked(bp2)) continue; // P027/A1：搁置题不构成在轮（但不豁免总账原则——账外仍会被拦）
-        const st = bp2.stage;
-        if (st === 'G' || st === 'F' || st === 'S' || st === 'C') { hasActive = true; break; }
-      }
-      if (hasActive || outsideCalls < BLOCK_THRESHOLD) return undefined;
-      valenceRecord('reject');
-      console.warn('[mpm][engine] 边界硬拦截: ' + name3 + ' (账外计数=' + outsideCalls + ')');
-      return 'MPM 边界硬拦截：无在轮题而账外工具调用已达 ' + outsideCalls + ' 次。总账原则要求先入账——调用 mpm_micro（小型任务一息入账）或 mpm_generate（建正式题）后自动放行；mpm_flywheel_state 可查看飞轮。';
-    }));
+    // 边界硬门禁实现已迁 engine/modules/guard.mjs（P079 r5；依赖注入）
+    ctx.effect(() => toolsSvc.guard(makeBoundaryGuard({ state: state, isParked: isParked, getOutsideCalls: function () { return outsideCalls; }, BLOCK_THRESHOLD: BLOCK_THRESHOLD, valenceRecord: valenceRecord })));
   } else {
     console.log('[mpm][engine] tools 服务不可用，硬门禁降级为快照警告');
   }
