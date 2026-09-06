@@ -111,6 +111,11 @@ dsh plugin --profile web add <本地克隆路径或 npm 包名 metaflywheel>
 2. `cordis_define` 新插件：`code.host` = 源文件 HOST 半函数体，`code.client` = CLIENT 半函数体（文件内注释体，去注释即用）；
 3. `cordis_run` → Web 头部视图排出现「认知飞轮」，随进程消亡，不影响引擎与状态。
 
+> **挂载实测笔记**（v2 源 · DSH web 实测 · 2025-11）：
+> - `cordis_define` 的 `idPrefix` 限 3–6 个小写字母——`mpmview`（7 字母）会被拒，改用 `mpmfw` 即过；
+> - `cordis_inspect_query` 的 `input` 参数在本实测中遭工具层序列化成字符串而连续报 `"must be an object"`——不要第三次重试（θ_G 漂移纪律），改用仓库既有运行证据（本面板历史挂载成功、P048 截图）并靠 run 后 `client-render` 诊断兜底；
+> - 客户端激活需用户在 UI 批准——`awaiting-approval` 不是失败，批准后系统经 run 卡/steering 报告最终结果，`currentPackageId` 更新即成功。
+
 ## 测试
 
 ```
