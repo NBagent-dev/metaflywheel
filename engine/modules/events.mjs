@@ -49,8 +49,16 @@ export function attachEventFaces(e) {
     //     ② 4 次 arguments 实际不同（宿主在参数里注入了逐次变化的字段）
     //   宿主源码里存在**两套几乎相同的 notifyResult 实现**（dsh-tools/lib/index.js:1067-1070
     //   与 3409-3420），运行时用哪套、exec 的真实形状如何，读源码定不了 —— 只能落一次盘。
-    //   落点选 state.measure（persist 的 plain 对象收它）。**读完即撤，不改变任何现有行为。**
-    if (!state.measure.trProbe && typeof name2 === 'string' && name2.indexOf('mpm_') !== 0) {
+    //   落点选 state.measure（persist 的 plain 对象收它）。不改变任何现有行为。
+    //   2026-09-26 结果已取到：keys = [token, callId, rootCallId, name, signal, agent,
+    //   deferContext, concludeTurn, arguments]、argumentsPresent = true、arguments 里
+    //   **只有模型给的参数**、sig 非 null ⇒ 排除了"取不到参数"与"参数每次不同"两个假设。
+    //   真因见下方 agent/inbox/inserted 的 P328 修复（宿主提醒把计数抹掉）。
+    //   探针**保留但可重置**：删掉 state.measure.trProbe 再触发一次即可重新取样。
+    //   ★健壮性（同日修）：旧写法把 `state.measure.trProbe` 直接摆在 if 首位且**在 try 之外**，
+    //   一旦 state.measure 缺失就会让整个 handler 抛异常。生产里 measure 始终存在所以没炸，
+    //   但"当前不触发"和"不会触发"不是一回事——这一整天都在修这个区别，不该自己再留一个。
+    if (state.measure && !state.measure.trProbe && typeof name2 === 'string' && name2.indexOf('mpm_') !== 0) {
       try {
         let aj = null;
         try { aj = JSON.stringify(exec && exec.arguments); } catch (e3) { aj = 'THREW:' + String(e3 && e3.message); }
@@ -125,9 +133,21 @@ export function attachEventFaces(e) {
     } catch (e2) {}
   });
 
-  ctx.on('agent/inbox/inserted', function () {
+  // ★P328 修复（2026-09-26）：**只有"人"的消息才算重新开始，系统注入的提醒不算。**
+  //   旧写法无条件清零 drift 的三个字段。而宿主 dsh-repeat-tool-reminder 在阈值 3 时
+  //   （其 Config.thresholds 默认 [3,5,8]）会以 createUserMessage 注入一条 user-role 提醒，
+  //   source.kind === 'repeat-tool-reminder'。两者阈值都是 3 ⇒ 宿主先响，把 MPM 的同签名
+  //   判据抹掉，θ_G 因此**恒假**。离线判决实验 _p328_interference.mjs 复现：
+  //     4 次连续同参 → deliberate 1 次（判据活着）；
+  //     3 次 + 一次 inbox/inserted + 第 4 次 → deliberate 0 次（判据被抹）。
+  //   修法取最小面：只把**已知的系统提醒来源**排除在"重置"之外；其余来源（真用户、未知形状）
+  //   一律保持原行为。方向是保守的——宁可过敏感（误报，每次只花一个回合），
+  //   也不要恒假（静默失灵，那比误报更坏且无人知晓）。
+  ctx.on('agent/inbox/inserted', function (payload) {
     perception.lastInboxAt = Date.now();
     perception.inboxCount += 1;
+    const src = payload && payload.message && payload.message.source;
+    if (src && src.kind === 'repeat-tool-reminder') return;
     drift.consecutiveErrors = 0; drift.signatureRepeat = 0; drift.active = false; drift.reason = '';
   });
 
