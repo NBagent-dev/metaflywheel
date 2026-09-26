@@ -189,16 +189,25 @@ async function remapForeignSedimentsImpl(e) {
 }
 
 // ── persist ────────────────────────────────────────────
+// ★P327 修复（2026-09-26）：**返回值即事实**。旧版把异常 catch 掉后 `return undefined`，
+//   六个调用方（tools.mjs 各处的 await d.persist()）与巡检都无从判断成功与否，
+//   "报成功"于是成了默认行为。本会话实证：21:02:57 之后连续三轮巡检全没落盘，
+//   台账 mtime 纹丝不动，P327 随一次重启直接蒸发——而每一轮都打印了"（已落盘）"。
+//   现在统一返回 { ok: true, target } 或 { ok: false, reason }。
 async function persistImpl(e) {
-  if (!e.fsSvc || !e.root.current) return;
+  if (!e.fsSvc || !e.root.current) return { ok: false, reason: 'fsSvc 缺失或沉积根未定' };
   e.bumpSnapRev();
+  let target;
   try {
-    const target = await e.fsSvc.resolve(stateFile(e.root.current));
+    target = await e.fsSvc.resolve(stateFile(e.root.current));
     const plain = { seq: e.state.seq, problems: e.state.problems, sediments: e.state.sediments, lastRoot: e.root.current, patrol: e.state.patrol, measure: e.state.measure, constitution: { autonomy: e.state.constitution.autonomy, grantedAt: e.state.constitution.grantedAt, log: e.state.constitution.log, lastFireAt: e.state.constitution.lastFireAt }, valence: { events: (e.state.valence && Array.isArray(e.state.valence.events)) ? e.state.valence.events.slice(-200) : [] }, narrations: e.state.narrations };
     await e.fsSvc.writeText(target, JSON.stringify(plain, null, 2));
     await writeHintImpl(e);
-  } catch (e) {
-    console.error('[mpm][engine] 持久化失败:', e && e.message ? e.message : e);
+    return { ok: true, target };
+  } catch (e2) {
+    const reason = e2 && e2.message ? e2.message : String(e2);
+    console.error('[mpm][engine] 持久化失败:', reason);
+    return { ok: false, reason };
   }
 }
 

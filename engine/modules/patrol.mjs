@@ -33,12 +33,30 @@ export function makePatrol(p) {
   let lastReviewRound = 0;
   function constitutionReview(nowMs) {
     const proposals = [];
+    const WIN = 24 * 3600 * 1000;
     let fires24 = 0;
-    for (let i = 0; i < state.constitution.log.length; i++) { if (nowMs - state.constitution.log[i].at < 24 * 3600 * 1000) fires24 += 1; }
+    for (let i = 0; i < state.constitution.log.length; i++) { if (nowMs - state.constitution.log[i].at < WIN) fires24 += 1; }
+    // P024/A1 观测前提：没有观测，就没有"沉默"可言。
+    //   实机教训（2026/9/6）：会话结束 33h 后重启，fires24=0 被判为"发射窗口为空集"，
+    //   但真因是"进程不在场"——24h 内巡检仅 1 轮，且 32.5h→0.03h 为整段空白。
+    const plog = (state.patrol && state.patrol.log) ? state.patrol.log : [];
+    let rounds24 = 0;
+    for (let i = 0; i < plog.length; i++) { if (nowMs - plog[i].at < WIN) rounds24 += 1; }
+    // P024/A2 阈值上界：审计窗(24h)长于证据缓冲容量（patrol.log 24 条=8h），
+    //   若用 WIN/PATROL_MS=72 做期望值，则即使全程在场也恒判"不在场"。期望值必须被缓冲容量截断。
+    const cap = plog.length || 1;
+    const expect = Math.min(Math.floor(WIN / PATROL_MS), cap);
+    const observed = rounds24 >= Math.max(3, Math.floor(expect / 3));
     let hasGF = false;
     for (const k in state.problems) { const st = state.problems[k].stage; if (st === 'G' || st === 'F' || st === 'S') hasGF = true; }
     if (state.constitution.autonomy && hasGF && fires24 === 0) {
-      proposals.push('沉默审计：执政权开启且在轮题存在，但 24h 内发动 0 次——发射窗口可能为空集，提案复审触发架构');
+      if (!observed) {
+        proposals.push('沉默审计·观测前提缺失：24h 内发动 0 次，但巡检仅 ' + rounds24 + '/' + expect +
+          ' 轮 ⇒ 归因"不在场（进程未运行）"，不判"发射窗口为空集"。本条只报事实。');
+      } else {
+        proposals.push('沉默审计：执政权开启且在轮题存在，但 24h 内发动 0 次——发射窗口可能为空集，提案复审触发架构（在场 ' +
+          rounds24 + '/' + expect + '，观测前提成立）');
+      }
     }
     if (state.measure.samples.length < 48) {
       proposals.push('常数审计：' + Object.keys(CONSTS).length + ' 项时间常数全部为 v0 占位（代谢史样本 ' + state.measure.samples.length + '/48），数据满窗后应按退役公式导出替换');
@@ -152,9 +170,16 @@ export function makePatrol(p) {
       const prevCost = state.patrol.log.length ? (state.patrol.log[state.patrol.log.length - 1].costTotal || 0) : 0;
       state.patrol.log.push({ round: state.patrol.rounds, at: nowMs, costTotal: costNow, costDelta: costNow - prevCost, signals: signals.length, deliberated: signals.length > 0 });
       if (state.patrol.log.length > 24) state.patrol.log.splice(0, state.patrol.log.length - 24);
+      // ★P327 修复（2026-09-26）：旧写法用 canPersist = !!(fsSvc && root.current) 冒充"落盘成功"——
+      //   它只检查**服务是否存在**，不看**写入结果**；而 persistImpl 内部把异常 catch 掉，
+      //   于是巡检每一轮都照打"（已落盘）"，哪怕磁盘上一个字节都没动。
+      //   本会话实证：21:02:57 之后连续三轮巡检（1003/1004/1005）全没落盘，
+      //   台账 mtime 纹丝不动，P327 随一次重启直接蒸发。
+      //   判据必须是 persist 的真实返回值，不是"服务在不在"。
       const canPersist = !!(fsSvc && root.current);
-      if (canPersist) await persist();
-      console.log('[mpm][patrol] 巡检#' + state.patrol.rounds + '：' + state.patrol.lastReport + (canPersist ? '（已落盘）' : '（内存模式，跳过落盘）'));
+      const pr = canPersist ? await persist() : { ok: false, reason: '无 fsSvc 或沉积根未定' };
+      const persistNote = (pr && pr.ok) ? '（已落盘）' : ('（未落盘：' + ((pr && pr.reason) || '未知') + '）');
+      console.log('[mpm][patrol] 巡检#' + state.patrol.rounds + '：' + state.patrol.lastReport + persistNote);
     } catch (e) {
       console.error('[mpm][patrol] 巡检异常:', e && e.message ? e.message : e);
     } finally {

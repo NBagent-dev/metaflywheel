@@ -1,6 +1,6 @@
 {
   "name": "metaflywheel",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "MetaFlywheel — Meta-Problem Modeling (MPM) cognitive flywheel as a resident engine for LLM agent runtimes",
   "type": "module",
   "license": "MIT",
