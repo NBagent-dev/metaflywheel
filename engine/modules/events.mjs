@@ -40,6 +40,35 @@ export function attachEventFaces(e) {
 
   ctx.on('tools/result', function (exec, result) {
     const name2 = exec && exec.name;
+    // ★P328 一次性诊断（2026-09-26）：θ_G 的同签名判据在本机实测**恒假**。
+    //   现场证据：4 次完全同参 read 之后既不报警也不发动；而 deliberate 的三项落盘证据
+    //   全部为证 —— constitution.log 末条仍是 16:04 的 P326、lastFireAt 距今 6.5h
+    //   （远超 45min 节流，真触发会立即发动而非挂账）、pending 为 0。
+    //   触发链是 sig!==null → repeat≥3 → deliberate，所以只剩两种可能，必须分开：
+    //     ① signatureOf 恒返回 null（exec.arguments 取不到）
+    //     ② 4 次 arguments 实际不同（宿主在参数里注入了逐次变化的字段）
+    //   宿主源码里存在**两套几乎相同的 notifyResult 实现**（dsh-tools/lib/index.js:1067-1070
+    //   与 3409-3420），运行时用哪套、exec 的真实形状如何，读源码定不了 —— 只能落一次盘。
+    //   落点选 state.measure（persist 的 plain 对象收它）。**读完即撤，不改变任何现有行为。**
+    if (!state.measure.trProbe && typeof name2 === 'string' && name2.indexOf('mpm_') !== 0) {
+      try {
+        let aj = null;
+        try { aj = JSON.stringify(exec && exec.arguments); } catch (e3) { aj = 'THREW:' + String(e3 && e3.message); }
+        state.measure.trProbe = {
+          at: Date.now(),
+          name: name2,
+          execType: exec === null ? 'null' : typeof exec,
+          keys: (exec && typeof exec === 'object') ? Object.keys(exec) : null,
+          argumentsPresent: !!(exec && exec.arguments != null),
+          argumentsType: exec ? typeof exec.arguments : 'no-exec',
+          argumentsJson: (aj === undefined ? 'undefined' : aj),
+          sig: signatureOf(name2, exec),
+          frozen: !!(exec && Object.isFrozen(exec)),
+        };
+      } catch (e2) {
+        state.measure.trProbe = { at: Date.now(), error: String(e2 && e2.message) };
+      }
+    }
     if (typeof name2 !== 'string' || name2.indexOf('mpm_') === 0) { setOutsideCalls(0); return; }
     const ids = Object.keys(state.problems);
     let hasActive = false;
