@@ -1,4 +1,11 @@
-# MPM A/B 测试 · B 臂组合补丁（无引擎版）
+# ⚠ 已废弃（2026-10-10）：B 臂不再用「整文件替换」。
+#   原因：本模板只保留 agent-loop 一段，替换过去会把活动补丁里其它条目
+#   （sandbox-policy / agent-default-model / ui-* …）一起清掉——B 臂不该以毁配置为代价。
+#   现行做法：switch-arm.ps1 -Arm B —— **只摘掉含 mpm-flywheel 的那一个 insert 块**，
+#   并在切换后自证「已无 mpm-flywheel」且「其它顶层条目一个没少」，证不出来就回滚。
+#   本文件仅作历史留存，不再被任何脚本引用。
+#
+# MPM A/B 测试 · B 臂组合补丁（无引擎版·历史）
 # 用法（见 install/ab-test/tasks.md 操作手册）：
 #   B 模式 = 把本文件内容替换 ~/.dsh/mpm/cordis.patch.user.yml → 重启 → 执行任务书
 #   A 模式 = 恢复原补丁（含 mpm-flywheel insert）→ 重启
