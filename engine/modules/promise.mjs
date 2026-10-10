@@ -23,6 +23,37 @@ export const AWAKEN_FORMS = ['after', 'cites', 'epsilon', 'exists', 'user'];
 // （这与巡检里既有的择题策略同源：P027/A3「一次点名 5~6 题的审议轰炸」不许再犯。）
 export const AWAKEN_MAX_PER_ROUND = 2;
 
+/** 单个子句的形式识别（与 evalAwaken 同源口径：认不出的不算机械形式）。 */
+function clauseKind(c) {
+  const m = /^(after|cites|epsilon|exists|user)\s*[:：]\s*(.+)$/i.exec(String(c || '').trim());
+  if (!m) return null;
+  const kind = m[1].toLowerCase(), arg = m[2].trim();
+  if (kind === 'after') return isFinite(Date.parse(arg.replace(/\//g, '-'))) ? 'after' : null;
+  if (kind === 'cites') return /^P\d+-M\d+$/i.test(arg) ? 'cites' : null;
+  if (kind === 'epsilon') return /^P\d+\s*(<=|>=|<|>)\s*[0-9]*\.?[0-9]+$/i.test(arg) ? 'epsilon' : null;
+  if (kind === 'exists') return arg ? 'exists' : null;
+  if (kind === 'user') return (arg.toLowerCase() === 'reply' || arg === '回复') ? 'user' : null;
+  return null;
+}
+
+/**
+ * ★P482 清单第⑥项：**承诺 vs 愿望**——账本读数正确性。
+ * 实测 13 条"承诺"里 12 条是不可机械判定的自由文本 ⇒ 语义上"永不唤醒"，
+ * 但快照把它们与真承诺混在同一行显示 ⇒ **把愿望当承诺读**（与 P339「历史记录被当当前状态读」同族）。
+ * 本函数只做**形式分类**（不判真假、不看环境）：有没有至少一个认得出的机械子句。
+ * - kind='promise'：至少一个机械子句（可被求值；其余子句记 unknown）
+ * - kind='wish'   ：全是自由文本 ⇒ 永不自动叫醒（要么改写，要么承认）
+ * - kind='empty'  ：没写
+ */
+export function shapeOfPromise(expr) {
+  const text = String(expr == null ? '' : expr).trim();
+  if (!text) return { kind: 'empty', mechanical: 0, free: 0, freeClauses: [] };
+  const clauses = text.split(/[;；\n]/).map(function (s) { return s.trim(); }).filter(Boolean);
+  const freeClauses = clauses.filter(function (c) { return !clauseKind(c); });
+  const mechanical = clauses.length - freeClauses.length;
+  return { kind: mechanical > 0 ? 'promise' : 'wish', mechanical: mechanical, free: freeClauses.length, freeClauses: freeClauses };
+}
+
 /**
  * 求值一条承诺表达式。
  * @param {string} expr - 个体自己写下的唤醒条件

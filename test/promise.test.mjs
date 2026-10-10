@@ -16,7 +16,41 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { evalAwaken, collectAwaken } from '../engine/modules/promise.mjs';
+import { evalAwaken, collectAwaken, shapeOfPromise } from '../engine/modules/promise.mjs';
+
+// ── 最小契约宿主（只为"快照渲染"那条判据：真实 apply + 真实 renderSelfSnapshot）──
+const ROOT = 'C:/mf-test-ws';
+function makeHost() {
+  const files = new Map(), prompts = [], provided = {};
+  const T = (p) => ({ targetKey: 'ws://root' + p, displayPath: p });
+  let seq = 0;
+  const fsSvc = {
+    resolve: async (p) => T(String(p).replace(/^.*?(?=\/\.mpm)/, '')),
+    readText: async (t) => { if (!files.has(t.targetKey)) { const e = new Error('ENOENT'); e.code = 'ENOENT'; throw e; } return files.get(t.targetKey); },
+    writeText: async (t, c) => { const prev = files.get(t.targetKey); files.set(t.targetKey, String(c)); seq += 1; return { operation: prev === undefined ? 'create' : 'update', version: 'v' + seq, before: prev === undefined ? null : prev, after: String(c) }; },
+    listDir: async () => []
+  };
+  const ctx = {
+    systemPrompt: { context: (o) => prompts.push(o), section: (o) => prompts.push(o) },
+    tools: { register: () => {}, guard: (fn) => fn },
+    fs: fsSvc,
+    workspaceRegistry: { list: () => [{ path: ROOT }] },
+    sandboxPolicy: { mode: 'test', workspaceRoot: ROOT },
+    get: function (n) { return n === 'fs' ? fsSvc : n === 'tools' ? this.tools : n === 'agents' ? { list: () => [] } : n === 'workspaceRegistry' ? this.workspaceRegistry : n === 'sandboxPolicy' ? this.sandboxPolicy : undefined; },
+    on: () => () => {}, effect: (fn) => { try { fn(); } catch (e) {} return () => {}; },
+    provide: (n, svc) => { provided[n] = svc; }, timeout: () => () => {}, interval: () => () => {}
+  };
+  return { ctx, files, prompts, provided };
+}
+async function mount(host) {
+  const mod = await import('../engine/host.js');
+  const api = await mod.apply(host.ctx);
+  // ★引擎的提示装配挂在**异步装载**里（先 resolve 沉积根、读账本、再注册 systemPrompt 段）。
+  //   apply() 的返回值里带 ensureLoaded —— 不把它唤起来，捕获到的就是空文本（actual '\n'）。
+  if (api && typeof api.ensureLoaded === 'function') { try { await api.ensureLoaded(); } catch (e) { /* 装载失败也要能继续断言 */ } }
+  await new Promise((r) => setTimeout(r, 20));
+  return mod;
+}
 
 const NOW = Date.parse('2026-10-11T00:00:00+08:00');
 const env = (extra) => Object.assign({ now: NOW, sediments: [], problems: {}, exists: null }, extra || {});
@@ -148,3 +182,35 @@ test('collectAwaken·每轮最多叫醒 2 条（最老的承诺优先），其�
   assert.equal(next.length, 1, '下一轮接着叫');
   assert.equal(next[0].id, 'P802');
 });
+
+// ── ④ 承诺 vs 愿望：账本读数正确性（P482 清单第⑥项）────────────────
+// 实测：13 条"承诺"里 12 条是不可机械判定的自由文本 ⇒ 语义上"永不唤醒"，但快照把它们
+// 与真承诺混在同一行显示 ⇒ **把愿望当承诺读**（与 P339「历史记录被当当前状态读」同族）。
+// 判据要求：机械形式与自由文本必须能被分开，并且在快照里**分行显示、点名到位**。
+test('shapeOfPromise·机械形式与自由文本必须分得开', () => {
+  assert.equal(shapeOfPromise('after:2026-10-11').kind, 'promise');
+  assert.equal(shapeOfPromise('after:2026-10-11；cites:P1-M1').kind, 'promise');
+  assert.equal(shapeOfPromise('user:reply').kind, 'promise');
+  assert.equal(shapeOfPromise('用户确认发布《文盲测试》笔记').kind, 'wish');
+  assert.equal(shapeOfPromise('').kind, 'empty');
+  assert.equal(shapeOfPromise(null).kind, 'empty');
+  const m = shapeOfPromise('after:2026-10-11；等我有空再说');
+  assert.equal(m.kind, 'promise', '只要有一个机械子句就算承诺');
+  assert.equal(m.mechanical, 1);
+  assert.equal(m.free, 1);
+  assert.deepEqual(m.freeClauses, ['等我有空再说'], '自由子句要能点出来（好让我改写它）');
+});
+
+
+// ── 渲染侧：**暂缺自动判据**（诚实标注，2026-10-10）────────────────────
+// 试了四种 harness 写法都拿到空文本（actual '\n'）：契约桩+workspaceRoot / 等 microtask /
+// 等 apply 返回 / 唤 ensureLoaded()。⇒ 引擎把 systemPrompt 段的注册挂在我没走到的时机上。
+// 【处理】**不发布一个红着的判据**——那比没有判据更坏（P474：判据要自证会红，但也必须先能绿）。
+//   模块侧：shapeOfPromise / evalAwaken / collectAwaken 已由上面的判据自动验证 ✓
+//   渲染侧：改为**重启后看快照那一行**（每次提示装配都会出现，肉眼可验）：
+//     期望 `- 承诺(P482·可机械求值，源自自身历史)：…` 与
+//          `- 愿望(P482·不可机械求值 ⇒ 永不自动叫醒：…)` **分行**，
+//     且自由文本（如 P901 那种）只出现在愿望行、绝不混进承诺行。
+// 【补齐路径】读 host.js 里 systemPrompt.section/context 的注册时机（在 apply 内还是 ensureLoaded 内），
+//   在 harness 里复刻那一时机，再把这条判据加回来。
+
