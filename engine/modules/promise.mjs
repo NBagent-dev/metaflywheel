@@ -109,6 +109,10 @@ export function collectAwaken(state, now, opts) {
     const expr = String((p.parked && p.parked.awakenWhen) || '').trim();
     if (!expr) continue;                                             // 没写承诺 ⇒ 与引入前一致
     if (p.awake && p.awake.expr === expr) continue;                   // 同一承诺不重复叫
+    // ★user:reply 要把"用户最后说话时刻"与"这条承诺写下时刻"相比 —— 后者是逐题的，必须在这里设。
+    //   第一版漏了这一行：env 里只有 perception，parkedAt 恒 undefined ⇒ user: 子句全记 unknown
+    //   ⇒ 永不成立。判据当场抓到（run 15 项里 1 项红），而**更大的错是我带着红提交了**。
+    env.parkedAt = (p.parked && typeof p.parked.at === 'number') ? p.parked.at : null;
     const r = evalAwaken(expr, env);
     if (r.evaluable === 0) continue;                                 // 全是自由文本 ⇒ 不求值、不唤醒
     if (!r.matched) { if (p.awake && p.awake.expr !== expr) p.awake = null; continue; }
