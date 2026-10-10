@@ -37,7 +37,13 @@ function makeHost() {
     workspaceRegistry: { list: () => [{ path: ROOT }] },
     sandboxPolicy: { mode: 'test', workspaceRoot: ROOT },
     get: function (n) { return n === 'fs' ? fsSvc : n === 'tools' ? this.tools : n === 'agents' ? { list: () => [] } : n === 'workspaceRegistry' ? this.workspaceRegistry : n === 'sandboxPolicy' ? this.sandboxPolicy : undefined; },
-    on: () => () => {}, effect: (fn) => { try { fn(); } catch (e) {} return () => {}; },
+    on: () => () => {},
+    // ★桩**不吞异常**：原来写的是 try{fn()}catch(e){}，等于让桩替引擎"静默降级"——
+    //   引擎在桩里装配失败时我什么都看不到，只会以为"它本来就没在这儿注册"。
+    //   （与 P488「桩复制了我的错误假设」同族：**桩的宽容度会掩盖真问题**。）
+    //   这是 2026-10-10 追"渲染判据为何拿到空文本"时查出来的——四个方向的怀疑里，
+    //   唯一自伤的那个是我自己的桩。
+    effect: (fn) => { fn(); return () => {}; },
     provide: (n, svc) => { provided[n] = svc; }, timeout: () => () => {}, interval: () => () => {}
   };
   return { ctx, files, prompts, provided };
