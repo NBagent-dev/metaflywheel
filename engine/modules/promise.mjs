@@ -17,7 +17,11 @@
 //   ③ **不可机械判定的子句记入 `unknown` 并忽略，绝不当成"已到期"**；若所有子句都不可判定，
 //      则永不唤醒——即"行为与引入本模块之前逐字一致"（反例判据）。
 //   ④ 引用/题不存在、没有探测器 ⇒ 记 `unknown`（**不确定 ≠ 成立**）。
-export const AWAKEN_FORMS = ['after', 'cites', 'epsilon', 'exists'];
+export const AWAKEN_FORMS = ['after', 'cites', 'epsilon', 'exists', 'user'];
+// 防"承诺炮"：用户一说话，所有"等用户答复"的承诺会同时成立（实测这一族有 6 条）。
+// 故每轮最多叫醒 AWAKEN_MAX_PER_ROUND 条，按承诺写下时间从老到新；其余条数报 deferred，下轮接着叫。
+// （这与巡检里既有的择题策略同源：P027/A3「一次点名 5~6 题的审议轰炸」不许再犯。）
+export const AWAKEN_MAX_PER_ROUND = 2;
 
 /**
  * 求值一条承诺表达式。
@@ -33,7 +37,7 @@ export function evalAwaken(expr, env) {
   const hits = [], unknown = [];
   for (let i = 0; i < clauses.length; i++) {
     const c = clauses[i];
-    const m = /^(after|cites|epsilon|exists)\s*[:：]\s*(.+)$/i.exec(c);
+    const m = /^(after|cites|epsilon|exists|user)\s*[:：]\s*(.+)$/i.exec(c);
     if (!m) { unknown.push(c); continue; }
     const kind = m[1].toLowerCase();
     const arg = m[2].trim();
@@ -60,6 +64,19 @@ export function evalAwaken(expr, env) {
       let yes = false;
       try { yes = !!e.exists(arg); } catch (_) { yes = false; }
       if (yes) hits.push({ clause: c, why: '路径已出现：' + arg });
+    } else if (kind === 'user') {
+      // `user:reply` = 用户**在我写下这条承诺之后**回过话。
+      // 这一族（"用户给出答复时"）在账本里有 6 条，是自由文本里最多的一类；
+      // 而引擎本来就在观测用户消息（perception.lastInboxAt）⇒ 它其实一直可观测，只是没人接上。
+      // ★perception 是宿主管状可变状态（不随账本落盘、重启归零）⇒ 缺它时记 unknown，绝不假装成立。
+      if (arg.toLowerCase() !== 'reply' && arg !== '回复') { unknown.push(c); continue; }
+      const perc = e.perception;
+      if (!perc || typeof perc.lastInboxAt !== 'number') { unknown.push(c); continue; }
+      const since = typeof e.parkedAt === 'number' ? e.parkedAt : null;
+      if (since == null) { unknown.push(c); continue; }
+      if (perc.lastInboxAt > since) {
+        hits.push({ clause: c, why: '用户在你写下这条承诺之后回过话（' + new Date(perc.lastInboxAt).toISOString().slice(0, 16).replace('T', ' ') + '）' });
+      }
     }
   }
   return { matched: hits.length > 0, hits: hits, unknown: unknown, evaluable: clauses.length - unknown.length };
@@ -77,9 +94,15 @@ export function collectAwaken(state, now, opts) {
     now: typeof now === 'number' ? now : Date.now(),
     sediments: state.sediments || [],
     problems: state.problems,
-    exists: (opts && opts.exists) || null
+    exists: (opts && opts.exists) || null,
+    perception: (opts && opts.perception) || null
   };
-  const ids = Object.keys(state.problems);
+  // 按"承诺写下时间"升序：要叫就先叫最老的（配合上面的防承诺炮上限）
+  const ids = Object.keys(state.problems).sort(function (a, b) {
+    const pa = state.problems[a], pb = state.problems[b];
+    return ((pa && pa.parked && pa.parked.at) || 0) - ((pb && pb.parked && pb.parked.at) || 0);
+  });
+  let deferred = 0;
   for (let i = 0; i < ids.length; i++) {
     const p = state.problems[ids[i]];
     if (!p || !p.parked) continue;                                   // 承诺只在搁置语境下有意义
@@ -89,8 +112,11 @@ export function collectAwaken(state, now, opts) {
     const r = evalAwaken(expr, env);
     if (r.evaluable === 0) continue;                                 // 全是自由文本 ⇒ 不求值、不唤醒
     if (!r.matched) { if (p.awake && p.awake.expr !== expr) p.awake = null; continue; }
+    if (out.length >= AWAKEN_MAX_PER_ROUND) { deferred += 1; continue; }   // 防承诺炮：本轮先叫最老的几条
     p.awake = { at: env.now, why: r.hits.map(function (h) { return h.why; }).join('；'), expr: expr };
     out.push({ id: p.id || ids[i], why: p.awake.why, expr: expr });
   }
+  // 只在非零时挂属性：不给空结果加形状（既有判据里的 deepEqual [] 仍然成立）
+  if (deferred) out.deferred = deferred;
   return out;
 }

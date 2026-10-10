@@ -112,3 +112,39 @@ test('collectAwaken·不碰未搁置的题（承诺只在搁置语境下有意�
   const st = mkState({ P900: { id: 'P900', stage: 'S', parked: null, awakenWhen: 'after:2020-01-01' } });
   assert.deepEqual(collectAwaken(st, NOW, {}), []);
 });
+
+// ── ③ user: 形式（"用户给出答复时"这一族的机械形式）────────────────
+// 成因（2026-10-10 实测）：12 条自由文本承诺里最多的一族就是「用户给出答复时」
+// （P413/P472/P355/P076/P025/P050）。而引擎**本来就在观测用户消息**
+// （perception.lastInboxAt / inboxCount）⇒ 这一族的"写不出来"不是能力问题，是没人把它接上。
+test('承诺求值·user:reply：我写下承诺之后用户回过话才算成立', () => {
+  const r0 = evalAwaken('user:reply', env());
+  assert.equal(r0.matched, false, '没有 perception ⇒ 不唤醒');
+  assert.equal(r0.evaluable, 0, '且记为无法判定，不是"未到期"');
+
+  const st = mkState({ P900: parkedWith('user:reply') });      // parked.at = NOW-3600e3
+  assert.deepEqual(collectAwaken(st, NOW, { perception: { lastInboxAt: NOW - 7200e3 } }), [],
+    '用户在我写下承诺**之前**说过话 ⇒ 不算成立');
+  const fired = collectAwaken(st, NOW, { perception: { lastInboxAt: NOW - 600e3 } });
+  assert.equal(fired.length, 1, '用户在我写下承诺**之后**说过话 ⇒ 成立');
+  assert.ok(String(st.problems.P900.awake.why).includes('用户'), '溯源要写明是用户回过话');
+});
+
+test('承诺求值·user: 只认 reply 这一种写法，别的算未识别（不许猜）', () => {
+  const r = evalAwaken('user:count>=3', env({ perception: { lastInboxAt: NOW } }));
+  assert.equal(r.matched, false);
+  assert.equal(r.evaluable, 0);
+});
+
+test('collectAwaken·每轮最多叫醒 2 条（最老的承诺优先），其余下轮——防承诺炮', () => {
+  const mk = (i, at) => ({ id: 'P80' + i, stage: 'S', updatedAt: at, parked: { at: at, awakenWhen: 'after:2020-01-01' } });
+  const st = mkState({ P800: mk(0, NOW - 5e6), P801: mk(1, NOW - 4e6), P802: mk(2, NOW - 3e6) });
+  const fired = collectAwaken(st, NOW, {});
+  assert.equal(fired.length, 2, '本轮只叫醒 2 条');
+  assert.equal(fired[0].id, 'P800', '最老的承诺优先');
+  assert.equal(fired.deferred, 1, '其余条数要报出来，不能悄悄吞掉');
+  assert.equal(st.problems.P802.awake, undefined, '未叫醒的不许先打标记（否则下轮就叫不动了）');
+  const next = collectAwaken(st, NOW + 1000, {});
+  assert.equal(next.length, 1, '下一轮接着叫');
+  assert.equal(next[0].id, 'P802');
+});

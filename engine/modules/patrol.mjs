@@ -13,7 +13,7 @@ import { STAGE_NAMES } from "./util.mjs";
 import { collectAwaken } from './promise.mjs';
 
 export function makePatrol(p) {
-  const { state, isParked, isOpen, ensureLoaded, snapshot, persist, deliberate, fsSvc, root, PATROL_MS, FIRE_THROTTLE_MS } = p;
+  const { state, isParked, isOpen, ensureLoaded, snapshot, persist, deliberate, fsSvc, root, PATROL_MS, FIRE_THROTTLE_MS, perception } = p;
 
   let patrolling = false;
   // P024 宪法复审 v1（LLM-free 机械审计）：修正案的机械发现层，批准权在主权者，复审不自动修改任何结构。
@@ -149,9 +149,12 @@ export function makePatrol(p) {
       //   语义边界（写死在 promise.mjs 并配判据）：未写承诺、或写了不可机械判定的自由文本时，
       //   **行为与引入本通道之前逐字一致**——不确定绝不当成"已到期"。
       try {
-        const fired = collectAwaken(state, nowMs, { exists: null });
+        const fired = collectAwaken(state, nowMs, { exists: null, perception: perception });
         for (let i = 0; i < fired.length; i++) {
           signals.push('★ 自己承诺的唤醒条件已成立：' + fired[i].id + '（你当初写下「' + fired[i].expr + '」；' + fired[i].why + '）——发起理由终止于你自己的历史，不是出厂规则；直接推进该题并 mpm_solve 登记');
+        }
+        if (fired.deferred) {
+          signals.push('另有 ' + fired.deferred + ' 条自己承诺的唤醒条件也成立，本轮只叫醒 ' + fired.length + ' 条（防承诺炮，最老的优先），其余下轮——不会被丢掉');
         }
       } catch (e) { /* 承诺求值永不阻断巡检（P484：装饰件不得成为单点故障） */ }
       if (!signals.length) {
