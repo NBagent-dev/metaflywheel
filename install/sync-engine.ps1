@@ -1,4 +1,4 @@
-# MetaFlywheel 引擎运行副本一键同步（防「重启后不生效/模块缺失」事故）
+﻿# MetaFlywheel 引擎运行副本一键同步（防「重启后不生效/模块缺失」事故）
 # 用法：powershell -ExecutionPolicy Bypass -File install\sync-engine.ps1
 # 行为：备份现有运行副本 -> 复制仓库 engine/host.js 与 engine/modules/*.mjs 到 ~/.dsh/mpm/engine/
 #       -> 校验 host.js 与全部模块逐字节一致 -> 提示重启生效（本脚本不影响已在运行的进程）

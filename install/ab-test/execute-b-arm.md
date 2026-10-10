@@ -7,14 +7,14 @@
 
 1. 切换 B 臂（一条命令）：
    ```
-   pwsh -ExecutionPolicy Bypass -File metaflywheel\install\ab-test\switch-b-arm.ps1
+   powershell -ExecutionPolicy Bypass -File metaflywheel\install\ab-test\switch-b-arm.ps1
    ```
 2. **重启 DSH** → **开新会话**（新会话里没有 MPM 工具/快照 = B 臂环境）。
 3. 把下方【任务书】**整体粘贴**给新会话，逐条执行（聊的过程中可以按任务书提示插入干扰消息）。
 4. 完成后：把该会话完整对话保存/粘贴给我（或把输出保存为 `metaflywheel\install\ab-test\results\arm-B.md`）。
 5. 恢复 A 臂（需要时）：
    ```
-   pwsh -ExecutionPolicy Bypass -File metaflywheel\install\ab-test\switch-a-arm.ps1
+   powershell -ExecutionPolicy Bypass -File metaflywheel\install\ab-test\switch-a-arm.ps1
    ```
    → 重启 DSH → 开新会话。
 
