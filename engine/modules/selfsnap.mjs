@@ -195,6 +195,20 @@ function renderSnapshotInner(d) {
     }
   }
   if (stale.length) lines.push('- ⚠ 陈旧(θ_E·§4.6)：' + stale.join('；') + '——长期无代谢进展：收敛、evoke 或显式关闭。');
+  // ★P482：**写下的承诺必须看得见**（可见性是判据的前提——今晚判据①正是靠"打出一行 mode"
+  //   才抓出自己兄弟的死代码）。此处只读不写，且未写承诺的题完全不出现在这一行。
+  const prom = [];
+  const due = [];
+  for (let i = 0; i < ids.length; i++) {
+    const p3 = state.problems[ids[i]];
+    if (!p3 || !d.isParked(p3)) continue;
+    const expr = String((p3.parked && p3.parked.awakenWhen) || '').trim();
+    if (!expr) continue;
+    if (p3.awake) due.push(p3.id + '（你当初写「' + expr + '」；' + String(p3.awake.why || '') + '）');
+    else prom.push(p3.id + ' 承诺「' + (expr.length > 60 ? expr.slice(0, 60) + '…' : expr) + '」');
+  }
+  if (prom.length) lines.push('- 承诺(P482·我自己写下的唤醒条件，源自自身历史)：' + prom.join('；') + '。');
+  if (due.length) lines.push('- ★ 待办意图(源自你自己的承诺，非出厂规则)：' + due.join('；') + '——直接推进该题并 mpm_solve 登记。');
   lines.push('- 指令：' + d.directiveText());
   lines.push('- 代谢：共' + ids.length + '题 · 沉积' + state.sediments.length + ' · 总账原则生效（非平凡工作必须可归账：推进在轮题或 mpm_micro 建账）。');
   if (d.outsideCalls >= d.BOUNDARY_THRESHOLD) {

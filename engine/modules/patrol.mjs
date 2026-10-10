@@ -10,6 +10,8 @@
 
 import { STAGE_NAMES } from "./util.mjs";
 
+import { collectAwaken } from './promise.mjs';
+
 export function makePatrol(p) {
   const { state, isParked, isOpen, ensureLoaded, snapshot, persist, deliberate, fsSvc, root, PATROL_MS, FIRE_THROTTLE_MS } = p;
 
@@ -141,6 +143,17 @@ export function makePatrol(p) {
       // P022 议程驱动发动（v7）：在轮题即常设意图。温热+节流满足时，每轮巡检取最久未推进的
       // G/F/S 题形成"议程推进"意图；停滞/熵升信号保留为优先升级项（有病理先报病理，无病理推议程）。
       // v6 的病理反射设计使发射窗口≈空集（温热与停滞近乎互斥），8 小时仅 1 条——感知与运动神经从此接通。
+      // ★P482：求值**个体自己写下的唤醒条件**（awakenWhen）。
+      //   这是本引擎第一处让"发起理由"终止于**个体自己的历史**而非出厂规则的通道：
+      //   在此之前，一切自主发动都可溯源到 θ_E 陈旧阈值 / 议程选取 / 执政权条款。
+      //   语义边界（写死在 promise.mjs 并配判据）：未写承诺、或写了不可机械判定的自由文本时，
+      //   **行为与引入本通道之前逐字一致**——不确定绝不当成"已到期"。
+      try {
+        const fired = collectAwaken(state, nowMs, { exists: null });
+        for (let i = 0; i < fired.length; i++) {
+          signals.push('★ 自己承诺的唤醒条件已成立：' + fired[i].id + '（你当初写下「' + fired[i].expr + '」；' + fired[i].why + '）——发起理由终止于你自己的历史，不是出厂规则；直接推进该题并 mpm_solve 登记');
+        }
+      } catch (e) { /* 承诺求值永不阻断巡检（P484：装饰件不得成为单点故障） */ }
       if (!signals.length) {
         let pick = null;
         for (let i = 0; i < activeIds.length; i++) {
