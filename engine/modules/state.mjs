@@ -169,6 +169,8 @@ async function restoreImpl(e) {
     e.diag.lastRestore = '已加载最新状态 ' + e.root.current + ' (freshness ' + best.fr + '，扫描 ' + cands.length + ' 个候选根)';
     console.log('[mpm][engine] ' + e.diag.lastRestore);
     await remapForeignSedimentsImpl(e);
+    // P487④：启动对账（孤儿 .md / 幽灵索引项）——只报不改，结论进 measure
+    await reconcileDeposits(e);
   }
 }
 
@@ -194,21 +196,105 @@ async function remapForeignSedimentsImpl(e) {
 //   "报成功"于是成了默认行为。本会话实证：21:02:57 之后连续三轮巡检全没落盘，
 //   台账 mtime 纹丝不动，P327 随一次重启直接蒸发——而每一轮都打印了"（已落盘）"。
 //   现在统一返回 { ok: true, target } 或 { ok: false, reason }。
+// ★P488（2026-10-10，取代 P487 的 node:fs 方案）：**按真实 fs 契约写**。
+//   P487 的②③④在生产里一次都没跑过：它们全挂在 `isLocalAbs(target)` 上，而
+//   `resolve()` 返回的根本不是路径——按 @deepseek-ai/dsh-fs 的类型定义，它是
+//   `FsTarget{ targetKey, displayPath }`，文档原话：
+//     "Consumers MUST NOT parse it or assume it is a local absolute path."
+//   ⇒ `typeof target === 'string'` 恒假 ⇒ 永久退化成直写，而那三条判据全是死代码。
+//   ★抓到它的**不是测试**：测试桩写成 `resolve: async p => p`，把我的错误假设又确认了一遍
+//     （桩由我写，于是七条判据全绿）。抓到它的是判据①自己——工具报告尾注打出
+//     「（账本已落盘 · direct · 非本地路径，跳过备份）」，我加了"可见结论"才看得见走了哪条路。
+//   ⇒ 现在只做服务契约本来就支持的三件事：
+//     ① **原子性交给平台**：FileSystem 接口原话 "mutations are atomic"，
+//        dsh-fs-local 走"独占同级文件 + atomic publish"。引擎**不再自己 tmp+rename**
+//        （平台另有 @deepseek-ai/dsh-atomic-write 做同一件事，手写一份是多余的）。
+//     ② **回读等价**：writeText 把写后内容放进 `out.after`（LF 归一化）⇒ 零成本校验。
+//     ③ **备份用 `out.before`**（写前内容，免费）。fs 服务**没有删除 API** ⇒ 备份用
+//        **单槽位固定名** `flywheel.json.bak`：天然有界，不需要轮转、也不需要删除。
+//   mode 只剩两种取值：'service-atomic' | 'failed'。
+const BACKUP_SUFFIX = '.bak';
+
+/** 落盘结论的统一文案（P487①：任何工具报告都必须带上它，不许无条件断言"已落盘"）。 */
+export function persistNote(pr) {
+  if (!pr) return '\n（本轮未发生落盘）';
+  if (pr.ok) return '\n（账本已落盘 · ' + (pr.mode || '?') + (pr.backup ? ' · ' + pr.backup : '') + '）';
+  return '\n⚠ **账本未落盘**：' + (pr.reason || '未知原因') + '（改动只在内存里，重启即失——不要当作已记账）';
+}
+
+/** LF 归一化：服务的 after 是 LF 归一化文本，比较前把两侧拉齐（Windows 的 \r\n 只可能来自我方）。 */
+function lf(s) { return String(s == null ? '' : s).replace(/\r\n/g, '\n'); }
+
 async function persistImpl(e) {
-  if (!e.fsSvc || !e.root.current) return { ok: false, reason: 'fsSvc 缺失或沉积根未定' };
+  if (!e.fsSvc || !e.root.current) return { ok: false, mode: 'failed', reason: 'fsSvc 缺失或沉积根未定' };
   e.bumpSnapRev();
-  let target;
+  const plain = { seq: e.state.seq, problems: e.state.problems, sediments: e.state.sediments, lastRoot: e.root.current, patrol: e.state.patrol, measure: e.state.measure, constitution: { autonomy: e.state.constitution.autonomy, grantedAt: e.state.constitution.grantedAt, log: e.state.constitution.log, lastFireAt: e.state.constitution.lastFireAt }, valence: { events: (e.state.valence && Array.isArray(e.state.valence.events)) ? e.state.valence.events.slice(-200) : [] }, narrations: e.state.narrations };
+  const json = JSON.stringify(plain, null, 2);
   try {
-    target = await e.fsSvc.resolve(stateFile(e.root.current));
-    const plain = { seq: e.state.seq, problems: e.state.problems, sediments: e.state.sediments, lastRoot: e.root.current, patrol: e.state.patrol, measure: e.state.measure, constitution: { autonomy: e.state.constitution.autonomy, grantedAt: e.state.constitution.grantedAt, log: e.state.constitution.log, lastFireAt: e.state.constitution.lastFireAt }, valence: { events: (e.state.valence && Array.isArray(e.state.valence.events)) ? e.state.valence.events.slice(-200) : [] }, narrations: e.state.narrations };
-    await e.fsSvc.writeText(target, JSON.stringify(plain, null, 2));
+    const target = await e.fsSvc.resolve(stateFile(e.root.current));
+    // ① 原子写：由平台保证（FileSystem 契约："mutations are atomic"）
+    const out = await e.fsSvc.writeText(target, json);
+    // ② 回读等价：服务把写后内容带了回来（null = 服务没提供，不是失败）
+    const verify = (out && typeof out.after === 'string') ? (lf(out.after) === lf(json)) : null;
+    if (verify === false) {
+      return { ok: false, mode: 'failed', reason: '回读内容与写出内容不一致（服务返回的 after ≠ 本次 json）', bytes: json.length };
+    }
+    // ③ 备份上一版：用 out.before，单槽位固定名（服务无删除 API ⇒ 天然有界）
+    let backup = '未提供写前内容';
+    if (out && out.operation === 'create') backup = '首写，无上一版';
+    else if (out && typeof out.before === 'string' && out.before.length) {
+      try {
+        const bt = await e.fsSvc.resolve(stateFile(e.root.current) + BACKUP_SUFFIX);
+        await e.fsSvc.writeText(bt, out.before);
+        backup = '上一版 ' + out.before.length + ' 字符 → flywheel.json' + BACKUP_SUFFIX;
+      } catch (e2) { backup = '备份失败：' + (e2 && e2.message ? e2.message : String(e2)); }
+    }
     await writeHintImpl(e);
-    return { ok: true, target };
+    // ★全函数**唯一的成功返回**：负控（_p327_persistcheck.mjs）靠注入它把出货代码降级成
+    //   "成功也返回 undefined"。多一个成功出口就会让负控失效——已实测一次。
+    return { ok: true, target: (target && target.displayPath) ? target.displayPath : '(target)', mode: 'service-atomic', bytes: json.length, verify: verify, backup: backup, operation: out && out.operation };
   } catch (e2) {
     const reason = e2 && e2.message ? e2.message : String(e2);
     console.error('[mpm][engine] 持久化失败:', reason);
-    return { ok: false, reason };
+    return { ok: false, mode: 'failed', reason };
   }
+}
+
+/**
+ * ④ P487：启动对账——沉积文件 × 索引双向比对。
+ *   孤儿 = .md 在磁盘上而索引里没有（重启后从我记忆里消失的那一类）；
+ *   幽灵 = 索引里有而文件不在。
+ * 结论写进 state.measure.reconcile ⇒ 随账本落盘 ⇒ 快照可按需显示。
+ */
+export async function reconcileDeposits(e) {
+  const out = { at: Date.now(), mode: 'skipped', orphans: [], ghosts: [] };
+  try {
+    if (!e.fsSvc || !e.root.current) { out.mode = 'skipped(无 fsSvc 或沉积根未定)'; }
+    else {
+      // P488：对账走服务契约的 listDir（**不再用 node:fs 猜路径**——resolve 返回的是 FsTarget 对象）
+      if (typeof e.fsSvc.listDir !== 'function') { out.mode = 'skipped(服务无 listDir)'; }
+      else {
+        const dir = await e.fsSvc.resolve(norm(e.root.current) + '/.mpm/deposits');
+        const entries = await e.fsSvc.listDir(dir);
+        const files = (entries || [])
+          .filter(function (x) { return x && x.type === 'file' && /\.md$/.test(String(x.name)); })
+          .map(function (x) { return String(x.name); });
+        const idx = {};
+        for (let i = 0; i < e.state.sediments.length; i++) {
+          const p = e.state.sediments[i].path;
+          if (p) idx[norm(p).slice(norm(p).lastIndexOf('/') + 1)] = e.state.sediments[i].id;
+        }
+        for (let i = 0; i < files.length; i++) if (!idx[files[i]]) out.orphans.push(files[i]);
+        for (const n in idx) if (files.indexOf(n) < 0) out.ghosts.push(idx[n] + ' ' + n);
+        out.mode = 'ok';
+      }
+    }
+  } catch (err) { out.mode = 'error: ' + (err && err.message ? err.message : String(err)); }
+  try { if (e.state && e.state.measure) e.state.measure.reconcile = out; } catch (_) {}
+  if (out.orphans.length || out.ghosts.length) {
+    console.log('[mpm][engine] 账本对账：孤儿 .md ' + out.orphans.length + ' 个 · 幽灵索引项 ' + out.ghosts.length + ' 个（' + out.mode + '）');
+  }
+  return out;
 }
 
 // ── collectEvidence / pickRoot ─────────────────────────
@@ -283,7 +369,13 @@ export function makeStateMachine(e) {
   }
   return {
     ensureLoaded,
-    persist: () => persistImpl(e),
+    // P487①：落盘结论必须能被工具层读到——记进 diag，供工具报告尾注使用
+    persist: async () => {
+      const pr = await persistImpl(e);
+      e.diag.lastPersist = pr;
+      e.diag.persistCount = (e.diag.persistCount || 0) + 1;
+      return pr;
+    },
     adoptRoot: (exec) => adoptRootImpl(e, exec),
     remapForeignSediments: () => remapForeignSedimentsImpl(e),
     readHint: () => readHintImpl(e),

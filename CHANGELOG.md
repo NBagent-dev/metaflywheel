@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3.2（2026-10-10）
+
+与运行副本追平，并把「稳定性」变成可重复执行的判据——四条线：
+
+- **运行副本追平（4 处分叉 + 4 个仅存在于运行副本的文件）**：`runstamp.mjs`（运行期自陈：进程启动时间 vs 源码 mtime）、`_p332_boot_check` / `_p332_runstamp_check` / `_p339_agenda_pick` 首次入库；`host.js` / `patrol.mjs` / `selfsnap.mjs` / `tools.mjs` 从运行副本回流
+- **落盘改为服务契约（P488）**：`resolve()` 返回的是 `FsTarget{targetKey, displayPath}` **不透明对象**（文档明写 "Consumers MUST NOT parse it or assume it is a local absolute path"），而旧代码用它判断「是否本地路径」⇒ **原子写/备份/对账三条判据在生产里从未执行**。现改为：原子性交给平台（接口原话 "mutations are atomic"）、回读等效用 `FsWriteOutcome.after`、备份取 `.before` 写入**单槽位** `flywheel.json.bak`（服务无删除 API ⇒ 天然有界）、对账走 `listDir`。同时删掉了整套自写的 tmp+rename 与轮转删除
+- **工具报告带落盘结论（P487）**：`mkTool` 统一在报告尾注追加「（账本已落盘 · service-atomic · …）」或「⚠ 账本未落盘：原因」；`mpm_deposit` 的「三属性」改为按真实结果逐条断言，不再无条件写「可索引(flywheel.json)」
+- **类型门禁（P491）**：`need()` 只查参数**在不在**、不查类型 ⇒ `mpm_generate({title: 1})` 会在账本里造出标题为 `"1"` 的题。现按工具声明必填字符串/数值，类型不对即拒绝并说明原因
+- **启动对账（P487④）**：沉积文件 × 索引双向比对（孤儿 `.md` / 幽灵索引项），结论进 `state.measure.reconcile`，快照只在非零时显示一行
+- **测试套件 5 → 15**：新增 `test/stability.test.mjs`（非法输入全工具覆盖 · 200 次随机调用浸泡 + 状态不变量 · 读写故障注入 · 冷启动往返 · 重复挂载）与 `test/ledger.test.mjs`（落盘走服务契约 · 备份单槽位 · 写失败不得「看起来成功」 · 回读不一致判失败 · 对账走 listDir）。**桩按真实契约书写**：`targetKey` 为 `ws://…`，任何把 target 当路径用的回归会立刻失败
+- **harness 修正**：旧 mock 宿主没有沉积根 ⇒ `persist()` 恒失败，**持久化路径从未被仓库测试覆盖**；现补 `workspaceRoot` + 同步 registry
+- **打包修正**：`package.json.files` 原为 `engine/host.js`（不含 `modules/`）⇒ 发布包会缺掉全部模块，改为 `engine/`
+- **测试**：`npm test` **15/15**（连续 3 遍，退出码 0）；`_p327_persistcheck` ALL PASS（注入式负控锚点已随实现更新）
+
 ## v0.3.1（2026-09-26）
 
 宿主迁移与「返回值即事实」——两条线：把 P247 签名修复回流仓库，并完成面向 DSH 0.1.7 / 官方桌面端的宿主契约迁移：

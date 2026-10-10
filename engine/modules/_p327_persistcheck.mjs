@@ -81,9 +81,12 @@ let injectOk = false;
 let oldGood;
 try {
   const src = fs.readFileSync(SHIPPED, 'utf8');
-  const broken = injectOnce(src, 'return { ok: true, target };', 'return;');
+  // ★P488 更新注入口：成功路径仍是**全函数唯一出口**（多出口会让本负控失效——已实测一次）。
+  //   注入的仍是**旧行为**（成功也返回 undefined），判据本身没变。
+  const ANCHOR = "return { ok: true, target: (target && target.displayPath) ? target.displayPath : '(target)', mode: 'service-atomic', bytes: json.length, verify: verify, backup: backup, operation: out && out.operation };";
+  const broken = injectOnce(src, ANCHOR, 'return;');
   if (broken === null) {
-    console.log('   !! 注入未命中（找不到 "return { ok: true, target };"，或命中不止一次）——负控无效');
+    console.log('   !! 注入未命中（找不到 ' + JSON.stringify(ANCHOR) + '，或命中不止一次）——负控无效');
   } else {
     fs.writeFileSync(TMP, broken);
     injectOk = true;

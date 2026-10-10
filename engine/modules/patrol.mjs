@@ -157,8 +157,16 @@ export function makePatrol(p) {
       // P019 审议循环（v6）：信号→意图→自主发动。执政权构成性开启；
       // 巡检承担代谢类信号（停滞/熵升）的定时审议，θ_G 类信号在 tools/result 当下即时审议。
       deliberate(signals, nowMs);
+      // ★P339：`lastReport` 是**历史记录**（本轮那一刻的快照），但 tools.mjs 的提示装配
+      //   把它与当前 rounds 拼在一行、无时点地宣称「当前巡检状态」。
+      //   实证（2026-09-30 18:24 #1267）：报告写「议程推进 P338（求解 阶段，7min 未推进）」，
+      //   而 P338 在**同一轮之后**被沉积，之后每一轮提示仍那样宣称 ⇒ 与账本 stage=D 不一致。
+      //   ★关键区分：那条报告**在当时是准确的**——错的不是它算得不对，
+      //     而是它**被当成当前状态读**。所以这里只**加时点**，不改任何判定逻辑。
+      //   （P339 界定的目标③：历史记录被呈现时必须带时点或历史标注。）
       state.patrol.rounds += 1;
       state.patrol.lastAt = nowMs;
+      state.patrol.lastReportAt = nowMs;
       state.patrol.lastReport = '陈旧题=' + (staleIds.length ? staleIds.join(',') : '0') +
         ' · 陈旧沉积=' + staleDeposits.length + ' · A_k=' + snap.stats.gain +
         ' · S=' + sProxy + (signals.length ? ' · ⚠' + signals.join('；') : '');

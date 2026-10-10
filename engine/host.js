@@ -19,6 +19,7 @@ import { makeBoundaryGuard } from "./modules/guard.mjs";
 import { makeStateMachine } from "./modules/state.mjs";
 import { attachEventFaces } from "./modules/events.mjs";
 import { makePatrol } from "./modules/patrol.mjs";
+import { makeRunStamp, runStampLine } from "./modules/runstamp.mjs";
 
 export const name = "mpm-flywheel";
 export const inject = ["systemPrompt", "tools", "fs", "sandboxPolicy", "timer"];
@@ -166,6 +167,18 @@ export function apply(ctx) {
   // Cross-plugin data surface: optional dynamic view plugins (client-only +
   // tiny host proxy) inject this service to read the flywheel snapshot.
   ctx.provide('mpmFlywheel', { snapshot });
+
+  // P332/P171 落地：运行期自陈。启动只记纯本地量（bootAt/pid/argv1），文件探测懒做、结果缓存。
+  // 为什么放在这里而不是 patrol：patrol 要等 20 分钟，而"我刚换了磁盘、跑的还是旧的"这件事
+  // 必须在**第一次装配**就可见——那正是今天错过的那一刻。
+  const ENGINE_FILES = [
+    new URL('./host.js', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'),
+    new URL('./modules/selfsnap.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
+  ];
+  state.runStamp = makeRunStamp({ engineFiles: ENGINE_FILES });
+  if (state.runStamp.stale) {
+    console.log('[mpm][runstamp] ⚠ ' + state.runStamp.reasons.join('；'));
+  }
   // M1 记忆唤醒（个体大脑 · 自我快照）：
   // text 为函数，系统提示每次组装时求值——个体在每次咨询群体超脑(LLM)前，
   // 把当前自我（在轮身份/记忆/代谢）实时重建进超脑的工作记忆。空态返回 ''，
@@ -174,7 +187,7 @@ export function apply(ctx) {
   ctx.systemPrompt.context({
     name: 'mpm:self',
     order: 151,
-    text: function () { return renderSelfSnapshot({ state: state, perception: perception, outsideCalls: outsideCalls, drift: drift, retrievalHits: retrievalHits, valenceSummaryLine: valenceSummaryLine, directiveText: directiveText, isParked: isParked, isOpen: isOpen, BOUNDARY_THRESHOLD: BOUNDARY_THRESHOLD }) }
+    text: function () { return renderSelfSnapshot({ state: state, perception: perception, outsideCalls: outsideCalls, drift: drift, retrievalHits: retrievalHits, valenceSummaryLine: valenceSummaryLine, directiveText: directiveText, isParked: isParked, isOpen: isOpen, BOUNDARY_THRESHOLD: BOUNDARY_THRESHOLD, runStampLine: function () { return runStampLine(state.runStamp); } }) }
   });
   ctx.systemPrompt.section({
     name: 'mpm:methodology',
@@ -227,8 +240,11 @@ export function apply(ctx) {
       c.pending = sigList && sigList.length ? sigList.map(function (s) { return { at: nowMs, signal: s }; }) : [];
       if (!c.autonomy || !sigList || !sigList.length) return;
       const warm = lastActive.agentId && (nowMs - lastActive.at) < 2 * 3600 * 1000;
-      if (!warm) { c.pending.unshift({ at: nowMs, signal: '（身体冷却：2h 内无活动会话，意图挂账不发动）' }); return; }
-      if (nowMs - c.lastFireAt < FIRE_THROTTLE_MS) { c.pending.unshift({ at: nowMs, signal: '（节流中：距上次发动不足45min，意图挂账）' }); return; }
+      // ★P339：挂账与发动必须**可区分**。原先两道闸只 unshift 一条文字信号，
+      //   从 `flywheel.json` 里看不出"这是被拦下的意图"还是"已发动的意图"——
+      //   两者在 pending 里的形状一样。加 `throttled` 标记后，账本自己说得清。
+      if (!warm) { c.pending.unshift({ at: nowMs, signal: '（身体冷却：2h 内无活动会话，意图挂账不发动）', throttled: 'cold' }); return; }
+      if (nowMs - c.lastFireAt < FIRE_THROTTLE_MS) { c.pending.unshift({ at: nowMs, signal: '（节流中：距上次发动不足45min，意图挂账）', throttled: 'throttle' }); return; }
       const agentsSvc = ctx.get('agents');
       const ag = agentsSvc && typeof agentsSvc.get === 'function' ? agentsSvc.get(lastActive.agentId) : undefined;
       if (!(ag && typeof ag.followup === 'function' && (ag.status === 'running' || ag.status === 'idle'))) return;
@@ -238,7 +254,21 @@ export function apply(ctx) {
         id: 'mpm-' + nowMs.toString(36) + '-' + Math.random().toString(36).slice(2, 8),
         role: 'user',
         content: [{ type: 'text', text: text }],
-        source: { kind: 'plugin', plugin: 'mpm-flywheel' }
+        // ★source.kind 必须是「producer-owned」——**不能是字符串 'plugin'**。
+        //   原先写 `{ kind: 'plugin', plugin: 'mpm-flywheel' }`，那条消息被
+        //   dsh-session-format-v3-to-v4 的 V4 校验直接拒绝：
+        //     throw new SessionFormatError("format v4 message requires a producer-owned source kind")
+        //   （该检查见 dsh-session-format-v3-to-v4/lib/index.js：
+        //      value["kind"] === "plugin" 即抛错）
+        //   ⇒ 症状：每次自主发动（deliberate → ag.followup）都会让会话写入失败，
+        //     界面报「处理失败 / 本轮运行失败 format v4 message requires a producer-owned source kind」，
+        //     **重启后暂时正常，直到下一次发动** —— 完全吻合"每次都要重启"。
+        //   规范写法（见该包 README / sources.ts::rewritePluginSource）：
+        //     完整插件串保留在 `plugin:` 之后 —— 名为 acme 的插件 ⇒ kind 为 'plugin:acme'。
+        //   ★注意它与 README 里那张"同名 first-party producers"名单的区别：
+        //     名单内（agent-instructions / goal / time-context / dsh-session-title-llm 等）
+        //     **直接保留原名**；mpm-flywheel 不在名单内，所以必须带 `plugin:` 前缀。
+        source: { kind: 'plugin:mpm-flywheel' }
       };
       ag.followup(msg);
       c.lastFireAt = nowMs;

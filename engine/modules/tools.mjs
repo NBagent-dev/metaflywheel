@@ -7,6 +7,154 @@
 // 铁律：只做「闭包→参数化」机械变换，判据/文案/阈值/流程一字未动。
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { phiOf, revisionOf } from "./util.mjs";
+import { sedimentCacheGet, retrieveTop } from "./retrieval.mjs";
+import { persistNote } from "./state.mjs";
+
+// ══ P482 账本可达性三件套（A 强制 / B 便宜 / C 可见）══════════════════════
+// 起因（2026-10-10 实测）：401 条沉积里只有 13 条参与过任何关联、引用边仅 10 条，
+// 且全部落在飞轮极早期（P006–P092）。原因是"引用了哪些旧沉积"全靠模型自觉填
+// （题上的 appliedSediments 只有 47/482），前 100 题填了，后 380 题悄悄废掉。
+// ⇒ 账本的可达性不能建立在"模型想起来"上：无状态实例没有"习惯"这回事。
+//
+// B：把候选沉积摆到眼前——从"自己想起来去查"变成"从菜单里挑"。
+//
+// ★P482/B-v2（2026-10-10 实测诊断后重写）。原实现直接调 retrieveTop（字符级 bigram +
+//   score=inter/eff），诊断出三个叠加缺陷：
+//   ① **英文字母对噪声**：'st'/'tr'/'ed'/'ra' 在任何英文里都出现，信息量≈0。实测中
+//      P238-M178（十年复利外推）正是靠 ed/ts/tr/ra/st/oo/ap 这些字母对拿到 inter=10。
+//   ② **分母不对称**：eff 是**沉积自己**的 bigram 数 ⇒ 标题越长越吃亏。P019-M14
+//      （知行合一契约）eff=63、score=0.095 落榜，而它才是这道题真正该命中的那条。
+//   ③ **单字通用词即可过闸**：inter>=2 时，一个三字词（"三件"+"件套"）就够。
+//   ⇒ 已实测：问题词的 DF 只有 0.5%（"件套"=3/401），**降 DF 阈值无效**（要降到 0.005
+//      才滤得掉，那会把几乎所有词一起滤掉）。所以不是调阈值，是换度量：
+//      · 中文只取 CJK 连续段的字符 bigram；英文取长度≥4 的**整词**（'w:' 前缀）
+//      · 分母改 sqrt(|A|·|Q|)（余弦式，两侧长度都被公平对待）
+//      · inter 门槛 3，且其中**至少 2 个必须是 CJK bigram**（纯字母对不算数）
+//   刻意不改 retrieval.mjs —— 那里的 retrieveTop 还被快照的「检索小脑」用着，
+//   动它会连带改变每轮自我快照的内容；这里自建一份，把影响面锁在本函数内。
+function cjkGrams(s) {
+  const t = String(s || '');
+  const out = new Set();
+  const cjk = t.match(/[\u4e00-\u9fa5]+/g) || [];
+  for (let i = 0; i < cjk.length; i++) {
+    const seg = cjk[i];
+    if (seg.length === 1) { out.add(seg); continue; }
+    for (let k = 0; k < seg.length - 1; k++) out.add(seg.slice(k, k + 2));
+  }
+  const words = t.toLowerCase().match(/[a-z][a-z0-9_]{3,}/g) || [];
+  for (let i = 0; i < words.length; i++) out.add('w:' + words[i]);
+  return out;
+}
+
+function domainKey(s) {
+  // "域"的代理：优先用 tags（有 tags 的 196 条）；无 tags 时退回题号段——
+  // 账本是按时间线性累积的，题号段≈时间段≈领域（P0xx 插件线 / P1xx-P2xx 量化线 /
+  // P3xx 易学与卡片 / P4xx 卡片与小程序）。两种代理都不完美，但足以回答
+  // "这两条是不是同一个领域的"这一个是非问题。
+  const tg = (s && s.tags) || [];
+  if (tg.length) return 't:' + tg.slice(0, 3).join('|');
+  const m = String((s && s.problemId) || '').match(/P(\d+)/);
+  if (m) return 'seg' + Math.floor(parseInt(m[1], 10) / 100);
+  return 'unknown';
+}
+
+function linkCandidates(d, queryText, n) {
+  try {
+    const seds = (d.state && d.state.sediments) || [];
+    if (!seds.length) return '';
+    const want = n || 8;
+    const Q = cjkGrams(queryText);
+    if (!Q.size) return '';
+    const items = [];
+    const df = {};
+    for (let i = 0; i < seds.length; i++) {
+      const s = seds[i];
+      const A = cjkGrams(String(s.title || '') + ' ' + (s.tags || []).join(' '));
+      items.push({ ref: s, A: A });
+      for (const g of A) df[g] = (df[g] || 0) + 1;
+    }
+    const total = items.length || 1;
+    const out = [];
+    for (let i = 0; i < items.length; i++) {
+      const A = items[i].A;
+      if (!A.size) continue;
+      let inter = 0, cjkInter = 0;
+      for (const g of A) {
+        if (!Q.has(g)) continue;
+        if (df[g] / total > 0.4) continue;
+        inter += 1;
+        if (g.charCodeAt(0) > 127) cjkInter += 1;
+      }
+      if (inter < 3 || cjkInter < 2) continue;
+      const score = inter / Math.sqrt(A.size * Q.size);
+      const cites = items[i].ref.cites || 0;
+      // ① cites 加权（P482/B-v3）：cites 是兑现次数（M9②），被引用过 4 次说明它确实
+      //    重要且可复用 —— 我们早就信这个数，却从没让它参与召回。这里补上。
+      out.push({ score: score, rank: score * (1 + Math.log(1 + cites)), cites: cites, ref: items[i].ref });
+    }
+    out.sort(function (a, b) { return b.rank - a.rank; });
+    // ② 跨域配额（P482/B-v3）：先按 rank 取"近距"的 want-2 条，再留 2 个名额给
+    //    "域尚未被占用"的候选并标记 [远]。
+    //    理由：「天马行空」要的不是相似，是远距 —— 而相似度算法天生只会给出最近的
+    //    那些。跨域这件事可以机械实现：不同 tags 簇（或不同题号段），但结构词有重叠。
+    const picked = [];
+    const used = {};
+    for (let i = 0; i < out.length && picked.length < Math.max(1, want - 2); i++) {
+      picked.push(out[i]);
+      used[domainKey(out[i].ref)] = true;
+    }
+    let far = 0;
+    for (let i = 0; i < out.length && far < 2 && picked.length < want; i++) {
+      if (picked.indexOf(out[i]) !== -1) continue;
+      const k = domainKey(out[i].ref);
+      if (used[k]) continue;
+      out[i].far = true;
+      picked.push(out[i]);
+      used[k] = true;
+      far += 1;
+    }
+    if (!picked.length) return '';
+    const parts = [];
+    for (let i = 0; i < picked.length; i++) {
+      const c = picked[i];
+      parts.push((c.far ? '[远] ' : '[近] ') + c.ref.id + ' ' + String(c.ref.title).slice(0, 42)
+        + '（相似' + Math.round(c.score * 1000) / 1000 + (c.cites ? ' · 引用' + c.cites : '') + '）');
+    }
+    return '\n【账本命中】旧沉积候选。[近]=字面最相似；[远]=与近距候选不同域、但结构词有重叠——**远的那几条才是类比的原料**。确认有承继关系者，沉积时用 links 显式引用：\n  · ' + parts.join('\n  · ');
+  } catch (e) { return ''; }
+}
+
+// C：关联网统计。这是"联想是否在累积"的唯一可观测量——图上的边多了，
+// 说明跨域关联在发生；一直是 13 个孤立节点，说明每轮联想仍是一次性的。
+function linkStats(sediments) {
+  try {
+    const ids = {};
+    for (let i = 0; i < sediments.length; i++) ids[sediments[i].id] = true;
+    const deg = {};
+    let edges = 0;
+    for (let i = 0; i < sediments.length; i++) {
+      const ls = sediments[i].links;
+      if (!ls || !ls.length) continue;
+      for (let j = 0; j < ls.length; j++) {
+        const t = ls[j];
+        if (!ids[t] || t === sediments[i].id) continue;
+        edges += 1;
+        deg[t] = (deg[t] || 0) + 1;
+        deg[sediments[i].id] = (deg[sediments[i].id] || 0) + 1;
+      }
+    }
+    const nodes = Object.keys(deg).length;
+    const ks = Object.keys(deg).sort(function (a, b) { return deg[b] - deg[a]; });
+    let top = '';
+    if (ks.length) {
+      const tt = [];
+      for (let i = 0; i < Math.min(3, ks.length); i++) tt.push(ks[i] + '×' + deg[ks[i]]);
+      top = ' · 最高度 ' + tt.join(' ');
+    }
+    const total = sediments.length || 1;
+    return '沉积 ' + sediments.length + ' · 有关联 ' + nodes + '（' + Math.round(nodes / total * 100) + '%）· 引用边 ' + edges + top;
+  } catch (e) { return '（统计失败）'; }
+}
 
 // 收敛四型分类（纯函数，P080 抽除 mpm_converge/mpm_micro 重复分支；行为等价）。
 // okD/okE 为 ε-δ 判据通过与否，okR 为鲁棒性通过与否。返回规范 type 字符串；
@@ -25,6 +173,51 @@ function classifyConvergence(okD, okE, okR) {
 // ({ name: {type, description, required?} }); requiredness is declared
 // per-property. The legacy shape (properties-wrapped + top-level type)
 // would register bogus parameters named properties/type/required.
+// ★P487①：工具报告必须带**这次落盘的真实结论**。
+//   病灶（2026-10-10 实测）：mpm_deposit 的 `await d.persist()` 把返回值丢掉，报告里
+//   却无条件写着"可索引(flywheel.json)"；那个 `if (!written)` 守卫盯的是沉积 .md 文件。
+//   ⇒ .md 写成功而账本写失败时，我会被告知"已沉积、可索引"，而账本里根本没有它。
+//   这正是 P327（报告成功而不是成功）在工具层的复发。
+//   做法：mkTool 的 execute 统一包一层，比对 diag.persistCount 判断"这次调用有没有落盘"，
+//   有就把 persistNote(...) 附到报告末尾——成功也附（注明 atomic/direct），失败尤其要附。
+let CURRENT_DEPS = null;   // makeTools 时绑定。引擎是单实例，故用模块级槽位（只为让包装器拿得到 diag）
+
+// ★P491 类型门禁（2026-10-10 由稳定性测试抓到）：`need()` 只检查参数**在不在**，不检查类型——
+//   于是 `mpm_generate({title: 1})` 被收下，账本里出现一条标题为 "1" 的题。
+//   **presence ≠ type。** 这里按工具声明必填的字符串/数值，类型不对就拒绝并说清原因，
+//   而不是悄悄收下、再让账本承担后果（空串同样拒绝：等于没给）。
+//   缺失参数仍交给各工具自己的 need() 报"缺少参数"，保持原有文案不变。
+const REQUIRED_STRINGS = {
+  mpm_generate: ['title', 'observation'],
+  mpm_frame: ['problemId', 'statement'],
+  mpm_solve: ['problemId', 'action'],
+  mpm_converge: ['problemId'],
+  mpm_deposit: ['problemId', 'title', 'body'],
+  mpm_evoke: ['sedimentId', 'friction'],
+  mpm_micro: ['title', 'statement', 'action'],
+  mpm_setroot: ['path'],
+  mpm_grant: ['action'],
+  mpm_narrate: ['text'],
+  mpm_flywheel_state: []
+};
+const REQUIRED_NUMBERS = {
+  mpm_frame: ['delta'], mpm_converge: ['delta', 'epsilon'],
+  mpm_solve: ['epsilon'], mpm_micro: ['delta', 'epsilon']
+};
+function badArg(args, toolName) {
+  for (const k of (REQUIRED_STRINGS[toolName] || [])) {
+    const v = args ? args[k] : undefined;
+    if (v === undefined || v === null) continue;      // 缺失 → 交给 need()
+    if (typeof v !== 'string' || !v.trim()) return '参数类型错误：' + k + ' 必须是非空字符串（收到 ' + (typeof v) + '）';
+  }
+  for (const k of (REQUIRED_NUMBERS[toolName] || [])) {
+    const v = args ? args[k] : undefined;
+    if (v === undefined || v === null) continue;
+    if (typeof v !== 'number' || !isFinite(v)) return '参数类型错误：' + k + ' 必须是有限数值（收到 ' + (typeof v) + '）';
+  }
+  return '';
+}
+
 function mkTool(name2, description, parameters, required, execute) {
   const flat = {};
   const props = (parameters && parameters.properties) || {};
@@ -42,7 +235,19 @@ function mkTool(name2, description, parameters, required, execute) {
         return [{ type: 'text', text }];
       }
     },
-    execute
+    execute: async function (args, exec) {
+      // P491 类型门禁：非法类型在这里被挡住，不进账本
+      const bad = badArg(args, name2);
+      if (bad) return { ok: false, report: bad };
+      const dg = CURRENT_DEPS && CURRENT_DEPS.diag;
+      const before = (dg && dg.persistCount) || 0;
+      const v = await execute(args, exec);
+      const after = (dg && dg.persistCount) || 0;
+      if (after > before && v && typeof v.report === 'string') {
+        return Object.assign({}, v, { report: v.report + persistNote(dg.lastPersist) });
+      }
+      return v;
+    }
   });
 }
 
@@ -54,7 +259,7 @@ async function toolGenerate(d, args, exec) {
   if (missing.length) return { ok: false, report: '缺少参数: ' + missing.join(', ') };
   const p = d.newProblem(args.title, args.observation, null);
   await d.persist();
-  return { ok: true, id: p.id, report: '问题已进入飞轮(G 生成)：' + d.fmtProblem(p) + '\n下一步：用 mpm_frame 把模糊问题感转化为可操作陈述，并给出 δ(界定精度0~1,越低越好)。' };
+  return { ok: true, id: p.id, report: '问题已进入飞轮(G 生成)：' + d.fmtProblem(p) + '\n下一步：用 mpm_frame 把模糊问题感转化为可操作陈述，并给出 δ(界定精度0~1,越低越好)。' + linkCandidates(d, args.title + ' ' + args.observation, 8) };
 }
 
 // ── F 界定 ─────────────────────────────────────────────
@@ -98,6 +303,7 @@ async function toolFrame(d, args, exec) {
   if ((p.deltaCredit || 1) < 1) report += '\n⚠ 误界定守卫(§6.1)：该题已记录 ' + p.deltaIncidents + ' 次 δ 自报失真，自报可信度 ' + p.deltaCredit + '——收敛判定建议附工具结果流证据。';
   if (dd > 0.6) report += '\n⚠ δ偏高：界定质量低，直接求解有“精确解决错误问题”的风险。';
   report += '\n下一步：用 mpm_solve 进入求解，或在求解后发现新证据时再次 mpm_frame 回溯。';
+  report += linkCandidates(d, p.title + ' ' + args.statement, 8);
   return { ok: true, id: p.id, reentry: wasFramed, report };
 }
 
@@ -271,6 +477,40 @@ async function toolDeposit(d, args, exec) {
   const p = d.state.problems[String(args.problemId)];
   if (!p) return { ok: false, report: '找不到问题 ' + args.problemId };
   if (p.stage !== 'C' && p.stage !== 'D') return { ok: false, report: '问题尚未收敛(当前' + p.stage + ')：先用 mpm_converge 达到完全收敛再沉积。' };
+  // ── P482/A：关联变强制 ──────────────────────────────────────────────
+  // 空着不给 → 拒绝，并当场把候选清单拍在脸上（B 的成果在这里兑现）；
+  // 写 none → 必须给一句理由 ⇒ 让"无前身"成为需要辩解的声明，而不是默认值。
+  // 与 depositBody 的 none 同一套路：熵屏障靠"辩解成本"实现，不靠禁止。
+  let links = [], linkWaiver = null;
+  const rawLinks = args.links;
+  if (rawLinks === undefined || rawLinks === null || String(rawLinks).trim() === '') {
+    const cand = linkCandidates(d, String(args.title) + ' ' + String(args.body), 8);
+    return { ok: false, report: '缺少 links：这条沉积是从哪条旧沉积长出来的？\n'
+      + '  · 有前身 → links=["P482-M400","P479-M399"]（JSON 数组字符串）\n'
+      + '  · 确实没有前身 → links="none"，并必须给 linkReason（一句为什么）\n'
+      + (cand ? cand : '\n（自动检索无命中——请自行翻阅 .mpm/deposits/ 后重试）') };
+  }
+  if (String(rawLinks).trim() === 'none') {
+    linkWaiver = String(args.linkReason || '').trim();
+    if (!linkWaiver) {
+      return { ok: false, report: 'links="none" 时必须给 linkReason：为什么这条沉积没有前身？\n'
+        + '（熵屏障：让"无前身"成为需要辩解的声明，而不是默认值——与 depositBody 的 none 同理）' };
+    }
+  } else {
+    try { links = JSON.parse(String(rawLinks)); }
+    catch (e) { return { ok: false, report: 'links 必须是 JSON 数组字符串或 "none"' }; }
+    if (!Array.isArray(links)) return { ok: false, report: 'links 必须是数组，例如 ["P479-M399"]' };
+    links = links.map(String).slice(0, 8);
+    // ★打错一个字符，引用就会**静默失效**——而静默失效正是这张网稀疏至今的原因之一：
+    //   appliedSediments 里填错的 ID 从不报错，只是从此不算数。所以这里宁可拒绝，不要静默接受。
+    const known = {};
+    for (let i = 0; i < d.state.sediments.length; i++) known[d.state.sediments[i].id] = true;
+    const bad = links.filter(function (x) { return !known[x]; });
+    if (bad.length) {
+      return { ok: false, report: 'links 里有账本中不存在的沉积 ID：' + bad.join('、')
+        + '\n（打错一个字符引用就会静默失效，所以这里宁可拒绝。可先 mpm_flywheel_state 查准确 ID）' };
+    }
+  }
   // 修复点：解析 tags JSON 字符串
   let tags = [];
   try { tags = JSON.parse(args.tags || '[]'); } catch(e) { tags = []; }
@@ -278,7 +518,7 @@ async function toolDeposit(d, args, exec) {
   tags = tags.map(String).slice(0, 8);
   const slug = String(args.title).replace(/[^\w\u4e00-\u9fa5-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'deposit';
   const relPath = '/.mpm/deposits/' + p.id + '-' + slug + '.md';
-  const front = '---\nid: ' + p.id + '-M' + (d.state.sediments.length + 1) + '\ntitle: ' + args.title + '\nproblem: ' + p.title + '\ntags: [' + tags.join(', ') + ']\ndepositedAt: ' + new Date().toISOString() + '\ndelta: ' + p.delta + '\nepsilon: ' + p.epsilon + '\ncost: ' + p.cost + '\n---\n\n';
+  const front = '---\nid: ' + p.id + '-M' + (d.state.sediments.length + 1) + '\ntitle: ' + args.title + '\nproblem: ' + p.title + '\ntags: [' + tags.join(', ') + ']\ndepositedAt: ' + new Date().toISOString() + '\ndelta: ' + p.delta + '\nepsilon: ' + p.epsilon + '\ncost: ' + p.cost + '\nlinks: [' + links.join(', ') + ']' + (linkWaiver ? '\nlinks_waiver: ' + linkWaiver : '') + '\n---\n\n';
   let written = false, absPath = '(内存)';
   if (d.fsSvc && d.root.current) {
     try {
@@ -294,16 +534,25 @@ async function toolDeposit(d, args, exec) {
     id: p.id + '-M' + (d.state.sediments.length + 1), problemId: p.id,
     title: String(args.title).slice(0, 120), tags,
     path: written ? absPath : null, depositedAt: Date.now(),
-    digest: String(args.body || '').replace(/\s+/g, ' ').slice(0, 200), cites: 0
+    digest: String(args.body || '').replace(/\s+/g, ' ').slice(0, 200), cites: 0,
+    links: links, linkWaiver: linkWaiver
   };
   d.state.sediments.push(sed);
   p.stage = 'D';
   p.deposit = { id: sed.id, path: sed.path, depositedAt: sed.depositedAt };
   p.gain = d.gainOf(p);
   d.touch(p, 'D 沉积 ' + sed.id, sed.path || '内存');
-  await d.persist();
-  let report = '已沉积 ' + sed.id + ' → ' + absPath + '\n三属性：不可逆(落盘文件)·可索引(flywheel.json)·熵屏障(低熵结构，环境漂移会提升失效风险)\n当前循环增益 A=' + p.gain + '\n当环境漂移/新证据与该沉积物产生认知摩擦时，用 mpm_evoke 激发新一轮问题。';
-  if (!written) report += '\n⚠ 磁盘写入不可用，沉积物暂存于索引元数据。';
+  const pr = await d.persist();   // ★P487①：返回值必须用起来——旧版把它丢掉，报告里却无条件写"可索引"
+  // 三属性逐条按**真实结果**写，不再无条件断言
+  const attr = '三属性：'
+    + (written ? '不可逆(落盘文件)' : '不可逆✗(文件未写出)')
+    + '·' + (pr && pr.ok ? '可索引(flywheel.json)' : '可索引✗(账本未落盘)')
+    + '·熵屏障(低熵结构，环境漂移会提升失效风险)';
+  let report = '已沉积 ' + sed.id + ' → ' + absPath + '\n' + attr + '\n当前循环增益 A=' + p.gain;
+  report += '\n关联：' + (links.length ? '引用了 ' + links.join('、') : '声明无前身（' + linkWaiver + '）');
+  report += '\n关联网：' + linkStats(d.state.sediments) + '——边变多说明跨域联想在累积；一直是老数字说明每轮联想仍是一次性的。';
+  report += '\n当环境漂移/新证据与该沉积物产生认知摩擦时，用 mpm_evoke 激发新一轮问题。';
+  if (!written) report += '\n⚠ 沉积文件未写出，沉积物暂存于索引元数据。';
   return { ok: true, sediment: sed, report };
 }
 
@@ -384,7 +633,26 @@ async function toolFlywheelState(d, args, exec) {
   if (d.diag.lastRestore) lines.push('[恢复] ' + d.diag.lastRestore);
   if (d.getOutsideCalls() > 0) lines.push('[边界] 无在轮账外工具调用: ' + d.getOutsideCalls() + (d.getOutsideCalls() >= d.BOUNDARY_THRESHOLD ? '（超阈值——自我快照将携带警告）' : ''));
   lines.push('[学习] φ=界定结构性覆盖 · 改写=回溯文本距离 · 学习兑现(改写≥0.3且后达C/D/E): ' + snap.stats.learnt + ' · 增益公式v1=[(Δδ+0.5Δε+0.2闭环)/max(1,C)]（P027/B5）');
-  if (d.state.patrol && d.state.patrol.rounds) lines.push('[巡检] 常驻循环#' + d.state.patrol.rounds + ' · ' + d.state.patrol.lastReport + ' · 间隔20min（P017 连续性改造）');
+  if (d.state.patrol && d.state.patrol.rounds) {
+    // ★P339：`lastReport` 是**那一轮的历史快照**，不是当前状态。原先的写法
+    //   `'[巡检] 常驻循环#' + rounds + ' · ' + lastReport` 把**当前轮次**与**历史文本**
+    //   无时点地拼在一起，读起来就是在宣称"现在是这样"。
+    //   实证：#1267（18:24）的报告写「议程推进 P338（求解 阶段）」并一直这样宣称，
+    //   而 P338 在该轮之后已沉积为 D ⇒ 与账本不一致，并触发了一次**误报的自主发动**。
+    //   ★注意：那条报告在当时是**准确的**。错的不是判定，是**呈现方式**。
+    //   所以这里补时点与年龄，并把"末轮报告"这个词显式写出来 —— 只改呈现，不改逻辑。
+    const pat = d.state.patrol;
+    const at = pat.lastReportAt || pat.lastAt || 0;
+    let when = '时点未知';
+    if (at) {
+      const ageMin = Math.max(0, Math.round((Date.now() - at) / 60000));
+      const hh = String(new Date(at).getHours()).padStart(2, '0');
+      const mm = String(new Date(at).getMinutes()).padStart(2, '0');
+      when = hh + ':' + mm + '（' + ageMin + 'min 前）';
+    }
+    lines.push('[巡检] 常驻循环#' + pat.rounds + ' · 末轮报告 ' + when + '：' + pat.lastReport +
+      ' · 间隔20min（P017 连续性改造）');
+  }
   if (d.state.measure && d.state.measure.samples.length) {
     const lastS = d.state.measure.samples[d.state.measure.samples.length - 1];
     lines.push('[测量] 样本 ' + d.state.measure.samples.length + '/48 · S(t)v0=' + lastS.s + '（近5趋势 ' + d.state.measure.samples.slice(-5).map(function (x) { return x.s; }).join('→') + '） · 漂移信号=' + (d.state.measure.driftSignals.length ? d.state.measure.driftSignals.join('；') : '无'));
@@ -398,6 +666,7 @@ async function toolFlywheelState(d, args, exec) {
   if (vl) lines.push(vl.replace(/^- 效价：/, '[效价] '));
   const rb2 = d.retrievalHits(d.state);
   for (let i = 0; i < rb2.length; i++) lines.push('[小脑] ' + rb2[i].text);
+  lines.push('[关联网] ' + linkStats(d.state.sediments) + '（P482/C：这是"联想是否在累积"的唯一可测量）');
   lines.push('[指令] ' + d.directiveText());
   for (let i = 0; i < snap.problems.length; i++) lines.push(d.fmtProblem(d.state.problems[snap.problems[i].id]));
   for (let j = 0; j < snap.sediments.length; j++) {
@@ -433,6 +702,7 @@ async function toolNarrate(d, args, exec) {
 // is unchanged from the pre-P080 form; each handler is now a module-top named function.
 export function makeTools(deps) {
   const d = deps;
+  CURRENT_DEPS = deps;   // P487①：绑定给 mkTool 的"落盘结论"包装器
   return [
     mkTool(
       'mpm_generate',
@@ -507,8 +777,14 @@ export function makeTools(deps) {
           title: { type: 'string', description: '沉积物标题' },
           body: { type: 'string', description: '正文：可复用的结论/因果结构/操作步骤' },
           // 修复点：将 tags 从 array 改为 string，由 execute 内部解析 JSON
-          tags: { type: 'string', description: '检索标签，JSON 数组字符串，如 ["tag1","tag2"]' }
+          tags: { type: 'string', description: '检索标签，JSON 数组字符串，如 ["tag1","tag2"]' },
+          links: { type: 'string', description: 'P482/A：这条沉积是从哪条旧沉积长出来的——JSON 数组字符串如 ["P482-M400"]；确实没有前身时写 "none" 并必须给 linkReason。空着会被拒绝（拒绝时附自动检索出的候选）。' },
+          linkReason: { type: 'string', description: 'links="none" 时的理由：为什么这条沉积没有前身' }
         } },
+      // ★刻意**不**把 links 放进 required —— P482/A 验收时发现的：放进去了会被 dsh-tools
+      //   的 schema 校验提前拦下，只回一句 "missing required property links"，
+      //   既没有候选清单，也没告诉你可以写 none。那不是引导，是判词。
+      //   交给 toolDeposit 兜底，才能把「引用候选 / 写 none+理由」两条出路一起摆出来。
       ['problemId', 'title', 'body'],
       (args, exec) => toolDeposit(d, args, exec)
     ),

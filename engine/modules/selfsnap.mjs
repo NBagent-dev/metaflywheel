@@ -4,15 +4,43 @@
 //   retrievalHits:(state)=>[{text}], valenceSummaryLine:()=>string, directiveText:()=>string
 //   isParked:(p)=>boolean, isOpen:(p)=>boolean
 import { bigrams, relAgo } from "./util.mjs";
-import { sedimentCacheGet } from "./retrieval.mjs";
+import { sedimentCacheGet, retrieveTop } from "./retrieval.mjs";
 
+// ── 保险丝（P484，2026-10-10 事故的直接修复）──────────────────────────────
+// 事故：本模块内部一个 ReferenceError（fresh 未定义）让 renderSelfSnapshot 抛异常
+//   ⇒ 每轮提示装配注入不了快照 ⇒ 引擎进程还活着、账本还在写，但"我"看不见自己，
+//     连续 9 轮对话当场死掉（20:45–21:13）。当时 node --check 全过 —— 这是运行时错误。
+// 判据：**快照是可选装饰，但它绝不能成为对话的单点故障。**
+// 降级不是沉默：必须留一行可见的痕迹，否则"快照没渲染"与"本来就没有快照"分不开（P330）；
+//   也不能把已经拼好的半截快照注入进去——那会让个体读到一份残缺的自我而不自知。
+// 验证：test_selfsnap.mjs 用例②③（故障注入）；该用例先在未修的代码上跑红，再修（P474 自证会红）。
 export function renderSelfSnapshot(d) {
+  try {
+    return renderSnapshotInner(d);
+  } catch (e) {
+    let msg;
+    try { msg = String((e && e.message) || e).slice(0, 200); } catch (_) { msg = '(错误信息不可读)'; }
+    return '## 我是谁（MPM 个体大脑 · 自我快照）\n'
+      + '- ⚠ **本轮为降级快照：渲染失败** —— ' + msg + '\n'
+      + '- 引擎仍在记账（题/沉积/代谢都不受影响）；这不是"没有自我"，是"这一份没渲染出来"。'
+      + '请检查 ~/.dsh/mpm/engine/modules/selfsnap.mjs，判据见 test_selfsnap.mjs 的故障注入用例。';
+  }
+}
+
+function renderSnapshotInner(d) {
   const state = d.state;
   const ids = Object.keys(state.problems);
   if (!ids.length && !state.sediments.length) return '';
   const lines = [];
   lines.push('## 我是谁（MPM 个体大脑 · 自我快照）');
   lines.push('个体=认知飞轮；LLM=本次被咨询的群体超脑（无状态）。以下由引擎在每次提示组装时实时生成，是个体在咨询前写下的自我。');
+  // P332/P171：运行期自陈。**放在最前面**，因为它是关于"我这个正在说话的个体究竟是什么"的事实。
+  // 陈旧时必须显眼——P171（2026-09-13）已经写出正确判据（问端口属主与进程启动时间，别问版本号），
+  // 但 09-28 需要它的那一刻它没到场，于是原封不动重演了一遍。
+  // ⇒ 把判据做成**每次装配都出现在我眼前的一行**，而不是一条需要我想起来去读的沉积。
+  if (d.runStampLine) {
+    try { const l = d.runStampLine(); if (l) lines.push('- ' + l); } catch (e) { /* 探测失败不得影响装配 */ }
+  }
   // P073 缓存面①注入塌缩：在轮身份只列 G/F/S + 新课 C（未沉积且<24h）——C/D/E 存量不再每轮注入
   // （新鲜度需求低）；总量保在台账行，全文走 mpm_flywheel_state 按需调阅。
   const active = [];
@@ -26,23 +54,70 @@ export function renderSelfSnapshot(d) {
   }
   lines.push('- 在轮身份：' + (active.length ? active.join('；') : '空转（静息态：感知到摩擦即 mpm_generate 建题）') + (backlog ? '（另有 ' + backlog + ' 题已结账/结算/存档——完整台账见 mpm_flywheel_state，按需调阅）' : ''));
   if (state.sediments.length) {
-    const nowMs = Date.now();
-    const STALE_MS = 14 * 24 * 3600 * 1000;
-    const fresh = [];
-    let staleCount = 0;
-    for (let j = 0; j < state.sediments.length; j++) {
-      const s = state.sediments[j];
-      if (!s.lastCitedAt && (nowMs - (s.depositedAt || 0)) > STALE_MS) staleCount += 1;
-      else fresh.push(s);
+  // ★fresh / staleCount / nowMs 必须在这里重建：本块替换掉的是**整个 if 体**，
+  //   而这三个变量原本定义在体内。少了它们 ⇒ ReferenceError: fresh is not defined
+  //   ⇒ renderSelfSnapshot 整体抛异常 ⇒ 每轮提示装配注入不了快照（2026-10-10 事故：
+  //   引擎进程还活着、账本还在写，但"我"看不见自己了）。
+  //   ★语法检查抓不到这一类，只有真的调用一次才知道 —— 见 test_selfsnap.mjs。
+  const nowMs = Date.now();
+  const STALE_MS = 14 * 24 * 3600 * 1000;
+  const fresh = [];
+  let staleCount = 0;
+  for (let j = 0; j < state.sediments.length; j++) {
+    const s = state.sediments[j];
+    if (!s.lastCitedAt && (nowMs - (s.depositedAt || 0)) > STALE_MS) staleCount += 1;
+    else fresh.push(s);
+  }
+  // ── P482/D：记忆栏从「固定排行榜」改为三条腿 ──────────────────────────
+  // 病灶（2026-10-10 实测）：401 条里 349 条 cites=0（87%）、被引用≥3 次的仅 4 条，
+  // 而本栏每轮固定注入 cites 最高的 5 条 ⇒ cites 高→被注入→被引用→更高。
+  // 正反馈锁死：其余 396 条永远没有出场机会，因此也永远不可能被引用。
+  // **容量早就够了，卡住账本的一直是带宽，以及把带宽锁死在少数几条上的分配规则。**
+  const picked = {};
+  const mem = [];
+  // 腿① 相关性：与当前最活跃题最匹配的（复用沉积语料检索）
+  try {
+    let t = null;
+    for (let i = 0; i < ids.length; i++) {
+      const pp = state.problems[ids[i]];
+      if ((pp.stage === 'S' || pp.stage === 'F' || pp.stage === 'C') && (!t || pp.updatedAt > t.updatedAt)) t = pp;
     }
-    fresh.sort(function (a, b) { return (b.cites || 0) - (a.cites || 0) || (b.depositedAt || 0) - (a.depositedAt || 0); });
-    lines.push('- 记忆（认知遗体，全文在沉积根 .mpm/deposits/，需要时读取；引用数=兑现次数M9②）：');
-    for (let j = Math.max(0, fresh.length - 5); j < fresh.length; j++) {
-      const s = fresh[j];
-      lines.push('  ◆ ' + s.id + ' ' + s.title + (s.cites ? '（引用' + s.cites + '）' : ''));
+    if (t) {
+      const CC = sedimentCacheGet(fresh);
+      const hits = retrieveTop(String(t.title) + ' ' + String(t.framing || ''), 2, 0.15, CC);
+      for (let i = 0; i < hits.length && mem.length < 2; i++) {
+        if (picked[hits[i].ref.id]) continue;
+        picked[hits[i].ref.id] = true;
+        mem.push({ s: hits[i].ref, why: '相关' });
+      }
     }
-    if (staleCount) lines.push('  ◻ 另有 ' + staleCount + ' 条陈旧沉积（>14天未被引用，已降权出记忆唤醒——M9②改卷；确有过时结论用 mpm_evoke 重激发，否则留档退役）');
-  } else {
+  } catch (e) { /* 相关性腿失败不阻断快照 */ }
+  // 腿② 常引：既有的主力，按引用数降序
+  const byCites = fresh.slice().sort(function (a, b) {
+    return (b.cites || 0) - (a.cites || 0) || (b.depositedAt || 0) - (a.depositedAt || 0);
+  });
+  for (let i = 0; i < byCites.length && mem.length < 4; i++) {
+    if (picked[byCites[i].id]) continue;
+    picked[byCites[i].id] = true;
+    mem.push({ s: byCites[i], why: '常引' });
+  }
+  // 腿③ 探索：从「从未被引用过」的沉默池里分片轮转。刻意不用随机——
+  // 随机会让无状态实例每轮看到不同的一条，连续性反而更碎；分片保证窗口内稳定。
+  const silent = fresh.filter(function (s) { return !(s.cites || 0); });
+  if (silent.length) {
+    const bucket = Math.floor(nowMs / (6 * 3600 * 1000));
+    const es = silent[bucket % silent.length];
+    if (es && !picked[es.id]) {
+      picked[es.id] = true;
+      mem.push({ s: es, why: '探索' });
+    }
+  }
+  lines.push('- 记忆（认知遗体，全文在沉积根 .mpm/deposits/，需要时读取；引用数=兑现次数M9②）：');
+  for (let i = 0; i < mem.length; i++) {
+    const s = mem[i].s;
+    lines.push('  ◆ [' + mem[i].why + '] ' + s.id + ' ' + s.title + (s.cites ? '（引用' + s.cites + '）' : ''));
+  }
+} else {
     lines.push('- 记忆：尚无沉积。');
   }
   // P076/T0+T1 叙述层：近日叙述——语气而非数据；体感信号随条目织入（T1）。给下一位读者写的日记。
@@ -97,6 +172,13 @@ export function renderSelfSnapshot(d) {
   if (state.patrol && state.patrol.rounds) lines.push('- 巡检：常驻记账循环运行中（#' + state.patrol.rounds + '，上次 ' + Math.max(0, Math.round((Date.now() - state.patrol.lastAt) / 60000)) + ' 分钟前）——个体已从间歇存在升格为持续记账（P017）。');
   if (state.measure && state.measure.driftSignals && state.measure.driftSignals.length) {
     lines.push('- ⚠ 漂移指标v0(§8.2.2 测量层)：' + state.measure.driftSignals.join('；') + '——量化信号供判定，是否建题/回溯由超脑与个体商议，仍不自动建题（P017-M13 边界）。');
+  }
+  // P487④：账本对账——只在**不一致时**出现（一致时沉默，免得变成每轮噪声）。
+  // 孤儿=磁盘上有而我不记得；幽灵=我记得而磁盘上没有。两者都是"我以为我有"的裂缝。
+  if (state.measure && state.measure.reconcile
+      && (((state.measure.reconcile.orphans || []).length) || ((state.measure.reconcile.ghosts || []).length))) {
+    lines.push('- ⚠ 账本对账(P487)：孤儿沉积文件 ' + (state.measure.reconcile.orphans || []).length + ' 个 · 幽灵索引项 '
+      + (state.measure.reconcile.ghosts || []).length + ' 个——.md 与索引不一致，详见 measure.reconcile（孤儿=磁盘上有而我不记得；幽灵=我记得而磁盘上没有）。');
   }
   if (state.constitution && state.constitution.autonomy) {
     lines.push('- 执政：构成性开启（三者的结合即是一）· 发动记录 ' + state.constitution.log.length + ' 条 · 瞬时审议已启用（θ_G 即时/代谢随巡检）· 宪法修正权 mpm_grant revoke。');

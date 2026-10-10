@@ -1,6 +1,6 @@
 {
   "name": "metaflywheel",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "MetaFlywheel — Meta-Problem Modeling (MPM) cognitive flywheel as a resident engine for LLM agent runtimes",
   "type": "module",
   "license": "MIT",
@@ -11,7 +11,7 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "engine/host.js",
+    "engine/",
     "cordis.patch.yml",
     "docs/",
     "tools/",
@@ -31,7 +31,7 @@
     "@deepseek-ai/dsh-tools": "*"
   },
   "scripts": {
-    "test": "node --test test/smoke.test.mjs"
+    "test": "node --test test/"
   },
   "repository": {
     "type": "git",

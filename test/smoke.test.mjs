@@ -96,7 +96,10 @@ test('MetaFlywheel 微生命周期：生成→界定→求解→收敛→沉积�
   assert.ok(String(c.report).includes('完全收敛') || c.ok === true, JSON.stringify(c));
 
   // D：沉积（落内存盘）
-  const d = await callTool(registered, 'mpm_deposit', { problemId: pid, title: '冒烟沉积', body: '生命周期验证沉积物', tags: '["smoke"]' });
+  // ★P482/A 起，mpm_deposit 强制要求 links（引用纪律必须机械强制，不能靠自觉）——
+  //   本用例原先只传 problemId/title/body，所以在仓库引擎落后时一直是绿的；
+  //   2026-10-10 同步部署后立刻变红，正是它该做的事。
+  const d = await callTool(registered, 'mpm_deposit', { problemId: pid, title: '冒烟沉积', body: '生命周期验证沉积物', tags: '["smoke"]', links: 'none', linkReason: '冒烟测试：本题没有前身' });
   assert.equal(d.ok, true);
   assert.ok(d.sediment && d.sediment.id, '沉积物应有 M 编号');
 

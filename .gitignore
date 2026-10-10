@@ -3,3 +3,8 @@ node_modules/*
 !node_modules/@deepseek-ai
 node_modules/@deepseek-ai/*
 !node_modules/@deepseek-ai/dsh-tools
+
+# 本地备份/临时产物（改前备份一律不进仓库：P327 的负控曾因依赖 .bak 而一入库就挂）
+*.bak
+*.bak-*
+_p327_injected_old_state.mjs
