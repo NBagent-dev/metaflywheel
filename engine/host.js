@@ -341,6 +341,10 @@ export function apply(ctx) {
   const patrolFn = makePatrol({
     state: state, isParked: isParked, isOpen: isOpen,
     ensureLoaded: ensureLoaded, snapshot: snapshot, persist: persist, deliberate: deliberate,
+    // ★`perception` 必须传：patrol 解构它来求值 `user:reply` 形式的承诺。漏传的代价
+    //   （2026-10-11 实机）：p.perception=undefined ⇒ user 形式永远落入 unknown、**永不唤醒**，
+    //   且不报错不留痕——我用"时机未到"解释了三次才查到。判据：test/wiring.test.mjs。
+    perception: perception,
     fsSvc: fsSvc, root: root, PATROL_MS: PATROL_MS, FIRE_THROTTLE_MS: FIRE_THROTTLE_MS
   });
   // 事件面/感知层已迁 engine/modules/events.mjs（P079：tools/result 监听、inbox/session 感知、巡检定时器调度）。
