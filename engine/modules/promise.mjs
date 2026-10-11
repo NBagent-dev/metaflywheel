@@ -113,6 +113,68 @@ export function evalAwaken(expr, env) {
   return { matched: hits.length > 0, hits: hits, unknown: unknown, evaluable: clauses.length - unknown.length };
 }
 
+/** P482⑨：叫醒后多少轮没有推进 ⇒ 记一次逾期（不能冤枉自己，也不能无限等）。 */
+export const OVERDUE_ROUNDS = 2;
+
+/**
+ * ★P482⑨ 最后一米：**让"履行"与"无视"在账本里长得不一样**。
+ *
+ * 缺口（auditAwaken 之前）：collectAwaken 叫醒后没有下文——我做了 ⇒ awake 不清；
+ * 我无视 ⇒ 不升级、不计数、不进信号。两条路径状态相同 ⇒ 承诺成了"只出声不结账"的东西。
+ *
+ * 为什么这能算解决（而不是绕过）最后一米：**我改不了模型，所以"想不想做"不可控；
+ * 但"做了没有"可以机械判定**——该题代价是否增长、updatedAt 是否推进，都是账本里的现成字段。
+ * ⇒ 结构解不是"让我更自觉"，而是**让不做留下痕迹：可分辨、会累积、会升级**。
+ *
+ * 规则：①有推进 ⇒ 清账（标 done，且同一 expr 不再重复叫）②满 OVERDUE_ROUNDS 轮无推进
+ * ⇒ 记逾期（次数累积 + 可读理由，由 patrol 变成 drift 信号）③从没叫醒的题永不被统计
+ * ④已清账的不许被追认成逾期（**迟做 ≠ 没做**）。
+ * @returns {{honored:Array, overdue:Array, stats:object, line:string}}
+ */
+export function auditAwaken(state, nowMs, opts) {
+  const st = state || {};
+  const round = (opts && typeof opts.round === 'number') ? opts.round : ((st.patrol && st.patrol.rounds) || 0);
+  const problems = st.problems || {};
+  const ids = Object.keys(problems);
+  const honored = [], overdue = [];
+  let woken = 0;
+  for (let i = 0; i < ids.length; i++) {
+    const p = problems[ids[i]];
+    if (!p || !p.awake || !p.awake.at) continue;
+    woken += 1;
+    if (p.awake.done) continue;                                  // ④ 已清账：不再统计
+    const at = p.awake.at;
+    const costAt = (typeof p.awake.costAt === 'number') ? p.awake.costAt : null;
+    const progressed = ((p.updatedAt || 0) > at) || (costAt !== null && (p.cost || 0) > costAt);
+    if (progressed) {                                            // ① 履行 ⇒ 清账
+      p.awake.done = true;
+      p.awake.doneAt = (typeof nowMs === 'number') ? nowMs : Date.now();
+      honored.push({ id: p.id || ids[i] });
+      continue;
+    }
+    const since = round - ((typeof p.awake.round === 'number') ? p.awake.round : round);
+    if (since >= OVERDUE_ROUNDS) {                                // ② 无视 ⇒ 逾期（累积）
+      p.awake.overdue = (p.awake.overdue || 0) + 1;
+      overdue.push({
+        id: p.id || ids[i], since: since, times: p.awake.overdue,
+        why: '被叫醒后 ' + since + ' 轮无推进（代价未增、未登记 solve、updatedAt 未动）'
+      });
+    }
+  }
+  const prev = (st.measure && st.measure.promiseStats) || {};
+  const stats = {
+    woken: woken,
+    honored: honored.length, honoredThisRound: honored.length,
+    overdue: overdue.length, overdueThisRound: overdue.length,
+    honoredTotal: (prev.honoredTotal || 0) + honored.length,
+    overdueTotal: (prev.overdueTotal || 0) + overdue.length
+  };
+  if (st.measure) st.measure.promiseStats = stats;
+  const line = '- 承诺履行(P482⑨·最后一米)：已叫醒 ' + woken + ' · 已履行 ' + stats.honoredTotal + ' · 逾期 ' + stats.overdueTotal
+    + (overdue.length ? '（本轮新增逾期 ' + overdue.length + '：' + overdue.map(function (o) { return o.id + '×' + o.times; }).join('、') + '）' : '');
+  return { honored: honored, overdue: overdue, stats: stats, line: line };
+}
+
 /**
  * 扫描全部**搁置**题，求值各自写下的承诺，命中的打上 `awake` 标记（含溯源）。
  * 纯函数式：只改传入的 state，不碰 IO；同一承诺不重复叫；承诺被改写则重新求值。
@@ -148,7 +210,8 @@ export function collectAwaken(state, now, opts) {
     if (r.evaluable === 0) continue;                                 // 全是自由文本 ⇒ 不求值、不唤醒
     if (!r.matched) { if (p.awake && p.awake.expr !== expr) p.awake = null; continue; }
     if (out.length >= AWAKEN_MAX_PER_ROUND) { deferred += 1; continue; }   // 防承诺炮：本轮先叫最老的几条
-    p.awake = { at: env.now, why: r.hits.map(function (h) { return h.why; }).join('；'), expr: expr };
+    // ★P482⑨：叫醒时记下 round 与当时的代价——否则"做了没有"无法机械判定（最后一米的前提）
+    p.awake = { at: env.now, why: r.hits.map(function (h) { return h.why; }).join('；'), expr: expr, round: (state.patrol && state.patrol.rounds) || 0, costAt: p.cost || 0 };
     out.push({ id: p.id || ids[i], why: p.awake.why, expr: expr });
   }
   // 只在非零时挂属性：不给空结果加形状（既有判据里的 deepEqual [] 仍然成立）

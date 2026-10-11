@@ -220,6 +220,12 @@ function renderSnapshotInner(d) {
   if (prom.length) lines.push('- 承诺(P482·可机械求值，源自自身历史)：' + prom.join('；') + '。');
   if (wish.length) lines.push('- 愿望(P482·不可机械求值 ⇒ 永不自动叫醒：要么改写成 after:/cites:/epsilon:/exists:/user:reply，要么承认它是愿望)：' + wish.join('；') + '。');
   if (due.length) lines.push('- ★ 待办意图(源自你自己的承诺，非出厂规则)：' + due.join('；') + '——直接推进该题并 mpm_solve 登记。');
+  // ★P482⑨ 最后一米：**履行与无视必须可比**——否则"没做"在账本里看不见
+  const ps = state.measure && state.measure.promiseStats;
+  if (ps) {
+    lines.push('- 承诺履行(P482⑨·最后一米)：已叫醒 ' + (ps.woken || 0) + ' · 已履行 ' + (ps.honoredTotal || 0)
+      + ' · 逾期 ' + (ps.overdueTotal || 0) + '——逾期不是系统在催，是**我自己写下的承诺没兑现**');
+  }
   // ★P482⑧：行动前检索的可见性——**看不到命中数，就不知道它到底有没有在工作**
   if (state.preAction) {
     const pa = state.preAction;

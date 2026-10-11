@@ -10,7 +10,7 @@
 
 import { STAGE_NAMES } from "./util.mjs";
 
-import { collectAwaken } from './promise.mjs';
+import { collectAwaken, auditAwaken } from './promise.mjs';
 import { isQuiet, rhythmOf } from './rhythm.mjs';
 
 export function makePatrol(p) {
@@ -156,6 +156,13 @@ export function makePatrol(p) {
         }
         if (fired.deferred) {
           signals.push('另有 ' + fired.deferred + ' 条自己承诺的唤醒条件也成立，本轮只叫醒 ' + fired.length + ' 条（防承诺炮，最老的优先），其余下轮——不会被丢掉');
+        }
+        // ★P482⑨ 最后一米：叫醒之后**必须结账**——做了(有推进痕迹) ⇒ 清账；无视 ⇒ 逾期(累积)。
+        //   只有 overdue 产生信号（honored 只记账，不必吵醒我）；逾期信号进议程 ⇒ 会升级、会被看见。
+        const aud = auditAwaken(state, nowMs, {});
+        for (let i = 0; i < aud.overdue.length; i++) {
+          signals.push('⚠ 承诺逾期未履行：' + aud.overdue[i].id + ' ' + aud.overdue[i].why
+            + '（**这是我自己的承诺没兑现，不是系统在催**）——要么现在推进并 mpm_solve 登记，要么明确改写或放弃这条承诺');
         }
       } catch (e) { /* 承诺求值永不阻断巡检（P484：装饰件不得成为单点故障） */ }
       if (!signals.length) {
