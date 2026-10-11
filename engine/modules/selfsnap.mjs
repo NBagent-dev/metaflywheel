@@ -7,6 +7,7 @@ import { bigrams, relAgo } from "./util.mjs";
 import { sedimentCacheGet, retrieveTop } from "./retrieval.mjs";
 import { shapeOfPromise } from "./promise.mjs";
 import { staleMsOf, rhythmLine, rhythmOf } from "./rhythm.mjs";
+import { principalLine } from "./principal.mjs";   // ★P517：委托人的思考方式
 
 // ── 保险丝（P484，2026-10-10 事故的直接修复）──────────────────────────────
 // 事故：本模块内部一个 ReferenceError（fresh 未定义）让 renderSelfSnapshot 抛异常
@@ -255,6 +256,8 @@ function renderSnapshotInner(d) {
       + ' · 行动前检索' + (state.preAction && state.preAction.off ? '**已停用**' : '启用')
       + ' · 否决路径：mpm_rhythm reset / 重命名 .mpm/preaction.rules.json / mpm_grant revoke');
   }
+  // ★P517：委托人的思考方式（**一条都没录入 ⇒ 整行不显示**——负控：不许凭空说"你说过"）。
+  { const pl = principalLine(state); if (pl) lines.push(pl); }
   lines.push(rhythmLine(state));   // ★P482④：节律必须可见，且标明"自我设定"还是"出厂默认"
   lines.push('- 指令：' + d.directiveText());
   lines.push('- 代谢：共' + ids.length + '题 · 沉积' + state.sediments.length + ' · 总账原则生效（非平凡工作必须可归账：推进在轮题或 mpm_micro 建账）。');

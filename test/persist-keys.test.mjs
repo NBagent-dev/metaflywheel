@@ -30,7 +30,10 @@ const EXPECTED_PERSISTED = ['seq', 'problems', 'sediments', 'lastRoot', 'patrol'
   //   test/presence-persist.test.mjs（两个方向 + 端到端 + 接线）与
   //   test/presence-merge.test.mjs（归并而非覆盖，调 engines 自己的 mergePresenceInto）。
   //   它是被**本条判据**逼着登记的——加完字段两秒后就报红："否则它的恢复无人看守"。
-  'presence'];
+  'presence',
+  // ★P517：**委托人的思考方式**（他说过什么、用什么方式说的）。
+  //   看守者：test/principal.test.mjs（模式识别 / 覆盖规则 / 负控不许编造 / 界线要写在显示里）。
+  'principal'];
 /** 对象型父字段：恢复时必须"先继承再覆盖"（源对象名约定为 <x>Src）。 */
 const OBJECT_PARENTS = ['patrol', 'measure', 'constitution', 'valence'];
 /** 明确豁免 + 理由（不许默默放过任何一个）。 */
@@ -53,13 +56,51 @@ test('每个落盘字段都必须被恢复（漏一个，磁盘上的值就会�
   assert.deepEqual(missing, [], '这些字段写了却没读回来：' + missing.join('、') + '\n恢复字段：' + Array.from(restored).join('、'));
 });
 
-test('若本机有真账本：它的顶层键必须与登记的 schema 一致（防止漏登记新字段）', () => {
+/** ★P517 改进：判据要测**实现**，不是测**运行实例的磁盘状态**。
+ *  原来"登记了但账本里不存在"直接判失败 —— 但账本由**正在运行的实例**写，
+ *  而实例可能仍是旧代码（改完要重启才生效）⇒ 于是 schema 与实现一致、却因为"还没重启"而报红。
+ *  正确的口径：**schema 必须与 persistImpl 实际写出的键一致**（静态扫源码，判据测实现）；
+ *  真账本缺某个键只作为**信息**（下一代会补上），不再作为失败。 */
+function persistedKeys(src) {
+  const r0 = src.indexOf('async function persistImpl');
+  assert.ok(r0 > 0, '找不到 persistImpl——判据锚点失效');
+  const block = src.slice(r0, src.indexOf('const json = JSON.stringify(plain', r0));
+  const i = block.indexOf('const plain = {');
+  assert.ok(i > 0, '找不到 plain 对象字面量——判据锚点失效');
+  const body = block.slice(i + 'const plain = {'.length);
+  const out = new Set();
+  // ★深度跟踪：只收**顶层**键。第一版用朴素正则，把 `constitution: { autonomy: … }` 里的
+  //   autonomy/grantedAt/log/lastFireAt、`valence: { events }`、presence IIFE 里的
+  //   lastInboxAt/inboxCount/… 全当成顶层键 ⇒ 一次假警报到 11 个。
+  //   另：三元表达式 `… === undefined ? undefined : (…)` 里的 `undefined :` 也会被误认为键 ⇒ 显式排除字面量 undefined。
+  let depth = 0;
+  const re = /([{}])|([A-Za-z_$][\w$]*)\s*:/g;
+  let m;
+  while ((m = re.exec(body)) !== null) {
+    if (m[1] === '{') { depth += 1; continue; }
+    if (m[1] === '}') { depth -= 1; if (depth < 0) break; continue; }
+    if (depth === 0 && m[2] && m[2] !== 'undefined') out.add(m[2]);
+  }
+  return out;
+}
+
+test('★schema 与**实现**必须一致（这是本判据的真正口径）', () => {
+  const wrote = persistedKeys(SRC);
+  const notRegistered = Array.from(wrote).filter(function (k) { return EXPECTED_PERSISTED.indexOf(k) < 0; });
+  assert.deepEqual(notRegistered, [], 'persistImpl 写了但没登记：' + notRegistered.join('、'));
+  const notWritten = EXPECTED_PERSISTED.filter(function (k) { return !wrote.has(k); });
+  assert.deepEqual(notWritten, [], '登记了但 persistImpl 不写（schema 与实现对不上）：' + notWritten.join('、'));
+});
+
+test('若本机有真账本：未登记的顶层键必须报错；缺键只作提示（实例可能仍是旧代码）', () => {
   if (!fs.existsSync(LEDGER)) return;                  // 其他机器/CI：跳过
   const keys = Object.keys(JSON.parse(fs.readFileSync(LEDGER, 'utf8')));
   const unregistered = keys.filter(function (k) { return EXPECTED_PERSISTED.indexOf(k) < 0; });
   assert.deepEqual(unregistered, [], '账本里有未登记的顶层字段（请加入 EXPECTED_PERSISTED，否则它的恢复无人看守）：' + unregistered.join('、'));
   const absent = EXPECTED_PERSISTED.filter(function (k) { return keys.indexOf(k) < 0; });
-  assert.deepEqual(absent, [], '登记了但账本里不存在（schema 与实现对不上）：' + absent.join('、'));
+  if (absent.length) {
+    console.log('  ℹ 真账本暂缺（下一代会补上，因为正在运行的实例可能仍是旧代码）：' + absent.join('、'));
+  }
 });
 
 test('对象型父字段：恢复必须"先继承再覆盖"（白名单重建 = 新字段静默丢失）', () => {

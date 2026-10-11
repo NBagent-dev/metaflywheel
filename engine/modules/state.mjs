@@ -104,6 +104,8 @@ async function readStateDataImpl(e, r) {
  * 语义：这类量只增不减（计数与时间戳）⇒ max 既安全又正确；agentId 只在为空时补（不盖掉本轮的）。
  * 同族：P502「累加器可以被擦」——修法同样是"取 max / 从事实重算"，而不是信任存储值。
  */
+import { mergePrincipalLists } from "./principal.mjs";   // ★P517（**第 4 次"用了没引入"**：靠冷启动集成判据抓到，不是静态判据）
+
 export function mergePresenceInto(perception, lastActive, pres) {
   if (!pres) return false;                       // 负控：没有磁盘证据 ⇒ 什么都不做（不许凭空造）
   let touched = false;
@@ -185,6 +187,10 @@ async function restoreImpl(e) {
       // ★**归并而不是覆盖**——懒加载的恢复可能晚于本轮已发生的事件（详见 mergePresenceInto 的注释）。
       mergePresenceInto(e.perception, e.lastActive, pres);
     }
+    // ★P517：**委托人的思考方式**（他说过什么、用什么方式说的）——同样必须跨重启存活。
+    //   与 presence 的区别：presence 记"他在不在"，principal 记"他怎么想"。
+    //   归并而非覆盖（P514 纪律：懒加载的恢复可能晚于本轮已录入的条目）。
+    e.state.principal = mergePrincipalLists(e.state.principal, (best.data && best.data.principal) || []);
     // Schema migration on restore: backfill fields introduced after a
     // problem was first persisted. Never assume new fields exist on old state.
     for (const bk in e.state.problems) {
@@ -289,6 +295,9 @@ async function persistImpl(e) {
   const plain = { seq: e.state.seq, problems: e.state.problems, sediments: e.state.sediments, lastRoot: e.root.current, patrol: e.state.patrol, measure: e.state.measure, constitution: { autonomy: e.state.constitution.autonomy, grantedAt: e.state.constitution.grantedAt, log: e.state.constitution.log, lastFireAt: e.state.constitution.lastFireAt }, valence: { events: (e.state.valence && Array.isArray(e.state.valence.events)) ? e.state.valence.events.slice(-200) : [] },     // ★没恢复过的字段，落盘时**省略**而不是写成 null：否则"恢复路径漏了一个字段"会升级成
     //   "把磁盘上的值擦掉"（2026-10-11 rhythm 就是这么丢的）。JSON.stringify 会丢掉 undefined 键。
     rhythm: e.state.rhythm === undefined ? undefined : (e.state.rhythm || null), narrations: e.state.narrations,
+    // ★P517：委托人的表态/思考方式。**空数组也落盘**（与 narrations 同）：schema 交叉核对要求
+    //   "登记了就必须在账本里存在"，否则"没录过"与"恢复了但没写"无法区分。
+    principal: Array.isArray(e.state.principal) ? e.state.principal.slice(-200) : [],
     // ★P511：用户在场证据——**没观测到就省略（undefined），不写 0/null**：
     //   写 0 会伪造"用户从未说过话"，写 null 会擦掉磁盘上已有的值（rhythm 那次就是这么丢的）。
     presence: (function () {
