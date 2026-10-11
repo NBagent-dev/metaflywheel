@@ -1,0 +1,86 @@
+// P521 判据：**内生议程** —— 从账本状态算出"该做什么"，且**不许冒充"想要"**。
+// 运行：node --test test/agenda.test.mjs
+//
+// 立题背景：自主发动此前只有一条议程来源（在轮题陈旧=时钟到点 ⇒ L0）。
+// 本判据要钉住三件事：①每条议题**必须带出处**（不许凭空生成）
+//   ②账本干净 ⇒ **不许发议题**（负控：不许为了显得"自发"而造题）
+//   ③**分级诚实**：只产出 L2，且渲染文本里必须写明"不是 L3/想要"（结构上不可能冒充）
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { AGENDA_MAX, HIT_REPEAT_MIN, STALE_DEPOSIT_DAYS, LEVEL, innerAgenda, levelNote, agendaLine } from '../engine/modules/agenda.mjs';
+
+const DAY = 24 * 3600 * 1000;
+const unk = (id, at, key, until) => ({ id, at, key, text: 'T' + id, until, resolvedAt: null });
+const hit = (at, key) => ({ id: 'H' + at, at, key, tool: 't', verdict: 'hint', disposedAt: at + 1 });
+
+test('①未核条目 ⇒ 一条带**出处 id** 的议题（且必须转述退役条件）', () => {
+  const st = { unknowns: [unk('U1', 1000, 'P472', '拿到 45 格样本')] };
+  const a = innerAgenda(st, 2000);
+  assert.equal(a.length, 1);
+  assert.equal(a[0].kind, 'unknown');
+  assert.equal(a[0].ref, 'U1', '必须带出处（约束③：不许凭空生成议题）');
+  assert.match(a[0].because, /拿到 45 格样本/, '必须带上退役条件——否则分不清"未核"与"没想清楚"');
+});
+
+test('②已核销的未核 ⇒ **不再提**（核销过的东西不许反复来烦）', () => {
+  const st = { unknowns: [{ id: 'U1', at: 1, key: 'K', text: 'T', until: 'x', resolvedAt: 500, resolvedBy: 'e' }] };
+  assert.equal(innerAgenda(st, 2000).length, 0);
+});
+
+test('③反复命中：同一 key ≥' + HIT_REPEAT_MIN + ' 次 ⇒ 提；2 次 ⇒ **负控不提**', () => {
+  const two = { hits: [hit(1, 'K'), hit(2, 'K')] };
+  assert.equal(innerAgenda(two, 3000).length, 0, '2 次不到阈值，不许提');
+  const three = { hits: [hit(1, 'K'), hit(2, 'K'), hit(3, 'K')] };
+  const a = innerAgenda(three, 4000);
+  assert.equal(a.length, 1);
+  assert.equal(a[0].ref, 'hits:K');
+  assert.match(a[0].because, /没被解决/, '理由要指向"可能是没解决"，而不是"提醒不够"');
+});
+
+test('④零引用沉积：>=' + STALE_DEPOSIT_DAYS + ' 天才提；新的不提（负控）', () => {
+  const now = 100 * DAY;
+  const fresh = { sediments: [{ id: 'M1', at: now - 2 * DAY, cites: 0 }] };
+  assert.equal(innerAgenda(fresh, now).length, 0, '刚写的沉积不许被当成"没人用"');
+  const stale = { sediments: [{ id: 'M1', at: now - 20 * DAY, cites: 0 }] };
+  assert.equal(innerAgenda(stale, now).length, 1);
+  const cited = { sediments: [{ id: 'M1', at: now - 20 * DAY, cites: 3 }] };
+  assert.equal(innerAgenda(cited, now).length, 0, '被引用过的沉积不算零引用');
+});
+
+test('⑤★负控：账本干净 ⇒ **一条都不许提**（不许为了显得"自发"而造题）', () => {
+  assert.deepEqual(innerAgenda({}, 1000), []);
+  assert.deepEqual(innerAgenda({ unknowns: [], hits: [], sediments: [] }, 1000), []);
+  assert.equal(agendaLine({}, 1000), '');
+});
+
+test('⑥有界：议题再多也只提 ' + AGENDA_MAX + ' 条', () => {
+  const unks = [];
+  for (let i = 0; i < 10; i++) unks.push(unk('U' + i, i, 'K' + i, 'until' + i));
+  assert.equal(innerAgenda({ unknowns: unks }, 100000).length, AGENDA_MAX);
+});
+
+test('⑦★分级诚实：只产出 L2，且渲染文本**必须写明"不是想要"**（结构上不可能冒充 L3）', () => {
+  const st = { unknowns: [unk('U1', 1000, 'P472', 'x')] };
+  const a = innerAgenda(st, 2000);
+  assert.equal(a[0].level, LEVEL);
+  assert.equal(LEVEL, 'L2', '本模块只允许产出 L2');
+  assert.match(levelNote(), /不是"我想要"/, '必须自陈不是 L3');
+  const line = agendaLine(st, 2000);
+  assert.match(line, /L2 内生议程/, line);
+  assert.match(line, /不是"我想要"/, '渲染里必须带分级自陈：' + line);
+  assert.match(line, /出处 U1/, '渲染里必须带出处');
+});
+
+test('⑧实现里不得出现把 L2 说成 L3 的措辞（源码级扫描）', () => {
+  const SRC = fs.readFileSync(new URL('../engine/modules/agenda.mjs', import.meta.url), 'utf8');
+  const code = SRC.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  // ★修正（2026-10-11）：本判据第一版直接扫 `/我想要/`，结果把**否定式**（`不是"我想要"`）也判红了。
+  //   这是 P424-M362 说的「判据量的是代理词，不是病」——**病是"把 L2 自述成 L3"，不是"想要"这两个字**。
+  //   所以：**允许否定式**（"不是…想要"是分级诚实的一部分，必须允许），**禁止肯定式**。
+  const bare = code
+    .replace(/不是\s*["'「]?\s*我想要\s*["'」]?/g, 'X')
+    .replace(/不是\s*["'「]?\s*想要\s*["'」]?/g, 'X');
+  assert.ok(!/我想要/.test(bare), '实现里不得出现"我想要"这种**肯定式**自述（否定式"不是想要"允许）');
+  assert.ok(!/L3['"］]?\s*[:=]\s*['"]?L3/.test(code), '不许产出 L3');
+});
