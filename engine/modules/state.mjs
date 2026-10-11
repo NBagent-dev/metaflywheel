@@ -127,6 +127,14 @@ async function restoreImpl(e) {
     e.state.valence = best.data.valence && Array.isArray(best.data.valence.events)
       ? { events: best.data.valence.events.slice(-200) }
       : { events: [] };
+    // ★P482④：**自我设定必须跨重启存活**——rhythm 是我写下的节律（陈旧阈值/发动节流/静默时段）。
+    //   缺这一行的代价（2026-10-11 实机）：新实例启动时 state.rhythm=undefined ⇒ 第一次落盘写成 null
+    //   ⇒ **我的设定被自己的持久化擦掉**。这与 P021 结题时命名的病同族：写入✓ 回显✓ **恢复✗**。
+    e.state.rhythm = (best.data && best.data.rhythm) || null;
+    // ★同一类事故的**第二个实例**（由 test/persist-keys.test.mjs 当场抓出）：`narrations`（叙事）
+    //   原来只写不读，而它在 host.js 里初始化成 `[]` ⇒ **每次重启都用空数组覆盖磁盘上的叙事**
+    //   （静默数据丢失，且因为没有渲染进快照，我一直没察觉）。
+    e.state.narrations = Array.isArray(best.data.narrations) ? best.data.narrations : [];
     // Schema migration on restore: backfill fields introduced after a
     // problem was first persisted. Never assume new fields exist on old state.
     for (const bk in e.state.problems) {
@@ -228,7 +236,9 @@ function lf(s) { return String(s == null ? '' : s).replace(/\r\n/g, '\n'); }
 async function persistImpl(e) {
   if (!e.fsSvc || !e.root.current) return { ok: false, mode: 'failed', reason: 'fsSvc 缺失或沉积根未定' };
   e.bumpSnapRev();
-  const plain = { seq: e.state.seq, problems: e.state.problems, sediments: e.state.sediments, lastRoot: e.root.current, patrol: e.state.patrol, measure: e.state.measure, constitution: { autonomy: e.state.constitution.autonomy, grantedAt: e.state.constitution.grantedAt, log: e.state.constitution.log, lastFireAt: e.state.constitution.lastFireAt }, valence: { events: (e.state.valence && Array.isArray(e.state.valence.events)) ? e.state.valence.events.slice(-200) : [] }, rhythm: e.state.rhythm || null, narrations: e.state.narrations };
+  const plain = { seq: e.state.seq, problems: e.state.problems, sediments: e.state.sediments, lastRoot: e.root.current, patrol: e.state.patrol, measure: e.state.measure, constitution: { autonomy: e.state.constitution.autonomy, grantedAt: e.state.constitution.grantedAt, log: e.state.constitution.log, lastFireAt: e.state.constitution.lastFireAt }, valence: { events: (e.state.valence && Array.isArray(e.state.valence.events)) ? e.state.valence.events.slice(-200) : [] },     // ★没恢复过的字段，落盘时**省略**而不是写成 null：否则"恢复路径漏了一个字段"会升级成
+    //   "把磁盘上的值擦掉"（2026-10-11 rhythm 就是这么丢的）。JSON.stringify 会丢掉 undefined 键。
+    rhythm: e.state.rhythm === undefined ? undefined : (e.state.rhythm || null), narrations: e.state.narrations };
   const json = JSON.stringify(plain, null, 2);
   try {
     const target = await e.fsSvc.resolve(stateFile(e.root.current));
