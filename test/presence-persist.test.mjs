@@ -50,6 +50,32 @@ test('②反例（职责边界）：恢复的是"事实"，不是"永久为真"�
     '恢复在场证据**不得**让"写下之前"的用户消息冒充"写下之后"');
 });
 
+test('④★接线：state.mjs 用到 e.perception/e.lastActive ⇒ host.js 必须把它们传进依赖', () => {
+  // ★这条判据是**当场补的**，因为前面三条一条都没抓住真 bug：
+  //   state.mjs 的恢复代码写的是 `e.perception.lastInboxAt = ...`，而 host.js 的调用点是
+  //   `makeStateMachine({ fsSvc, policy, ctx, state, root, diag, adopted, bumpSnapRev, gainOf })`
+  //   —— **perception / lastActive 根本没传** ⇒ 恢复拿到的永远是 undefined ⇒ **静默什么都不做**。
+  //   这与 P482⑧（patrol 解构了 perception 却没传 ⇒ user:reply 永不匹配）是**同一个形态**。
+  //   前三条判据为什么失明：①只查源码里有没有 "presence" 字样；②用手**自己造**的 perception 求值；
+  //   ③只查省略逻辑。**没有一条去看真实的调用点。**
+  const HOST = fs.readFileSync(new URL('../engine/host.js', import.meta.url), 'utf8');
+  const m = /makeStateMachine\(\{([\s\S]*?)\}\)/.exec(HOST);
+  assert.ok(m, '找不到 makeStateMachine 的调用点');
+  const args = m[1];
+  assert.match(args, /perception/, 'state.mjs 的恢复要用 e.perception ⇒ host.js 必须传它（否则恢复静默失效）');
+  assert.match(args, /lastActive/, 'state.mjs 的恢复要用 e.lastActive ⇒ host.js 必须传它（否则温热判定跨重启仍失真）');
+});
+
+test('④补充：传进去的必须是**同一个对象实例**（不是同名字段）', () => {
+  const HOST = fs.readFileSync(new URL('../engine/host.js', import.meta.url), 'utf8');
+  const m = /makeStateMachine\(\{([\s\S]*?)\}\)/.exec(HOST);
+  const args = m[1];
+  // 断言写法是 `perception:` / `perception,` 这种"传变量本身"，而不是 `perception: {}` 这种新建
+  assert.match(args, /perception\s*(,|:)/, 'perception 必须以变量形式传入');
+  assert.ok(!/perception\s*:\s*\{/.test(args), '不许在这里新建一个字面量对象（那与宿主态不是同一个实例）');
+  assert.ok(!/lastActive\s*:\s*\{/.test(args), 'lastActive 同理');
+});
+
 test('③负控：没观测到用户消息 ⇒ 省略而不是写 0/null', () => {
   // 判据落在源码的判定条件上：只有 lastInboxAt > 0 才构造 presence
   assert.ok(/lastInboxAt\s*>\s*0/.test(SRC), '必须区分"没观测到"与"观测到 0 时刻"');

@@ -35,7 +35,14 @@ export function apply(ctx) {
   // root/adopted/diag 由宿主创建后传入（宿主所有权），模块只读取/变更、不重建。
   const root = { current: '' };
   const adopted = {};
-  const st = makeStateMachine({ fsSvc, policy, ctx, state, root, diag, adopted, bumpSnapRev, gainOf });
+  // ★P511：`perception` / `lastActive` 必须**在 makeStateMachine 之前**定义并传入——
+  //   state.mjs 的恢复代码要用它们把"用户在场证据"写回宿主态。
+  //   为什么上移：原来它们定义在 100 多行之后 ⇒ 调用点拿不到 ⇒ **恢复静默失效**
+  //   （与 P482⑧「解构了/用了，但没传进依赖」**同一形态**，隔一天在同一个子系统重演；
+  //    当时 4 条判据全绿、只有新补的"接线判据④"抓住它）。
+  const perception = { lastInboxAt: 0, inboxCount: 0, sessionStarts: 0, lastSessionStartAt: 0 };
+  const lastActive = { agentId: '', at: 0 };
+  const st = makeStateMachine({ fsSvc, policy, ctx, state, root, diag, adopted, bumpSnapRev, gainOf, perception, lastActive });
   root.current = st.resolveInitialRoot();
   const { ensureLoaded, persist, adoptRoot, remapForeignSediments, norm } = st;
   // P073 缓存面③：快照修订号——每次状态 mutation 递增（persist/tools-result/deliberate 三处覆盖），
@@ -143,8 +150,10 @@ export function apply(ctx) {
   const drift = { consecutiveErrors: 0, lastSignature: '', signatureRepeat: 0, active: false, reason: '' };
   // ── 接管层：运动神经（硬门禁）+ 感官（事件感知）+ 策略源（指令）──
   const BLOCK_THRESHOLD = 12;
-  const perception = { lastInboxAt: 0, inboxCount: 0, sessionStarts: 0, lastSessionStartAt: 0 };
-  const lastActive = { agentId: '', at: 0 };
+  // perception / lastActive 已上移到 makeStateMachine 调用之前（P511：state.mjs 的恢复要用它们写回宿主态）。
+  // ★事故留档：删这两行时 old_string 撞了两处、只删掉一处 ⇒ **两个 const 并存 ⇒ 语法错误**，
+  //   而部署侧那份已被复制成坏文件（下次重启会加载失败）。判据没拦住它，因为是 `node --check` 拦的——
+  //   **"改完先语法检查"这一步不能省，且要在复制到仓库之前做。**
   function directiveText() { return directiveTextCore({ state: state, isParked: isParked, isOpen: isOpen, outsideCalls: outsideCalls, BOUNDARY_THRESHOLD: BOUNDARY_THRESHOLD }); }
   const toolsSvc = ctx.get('tools');
   if (toolsSvc && typeof toolsSvc.guard === 'function') {
