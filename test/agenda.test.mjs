@@ -91,3 +91,18 @@ test('⑨★接线：selfsnap 必须渲染内生议程（**能算出 ≠ 会被�
   assert.ok(/agendaLine\(state\)/.test(SRC), 'selfsnap 必须真的调用 agendaLine(state)');
   assert.ok(/if\s*\(\s*al\s*\)\s*lines\.push\(al\)/.test(SRC), '空议程 ⇒ 不 push（负控）');
 });
+
+test('⑩★接线：patrol 必须让内生议题**成为一次自主发动的信号**（带出处 + 分级自陈 + 位置正确）', () => {
+  const SRC = fs.readFileSync(new URL('../engine/modules/patrol.mjs', import.meta.url), 'utf8');
+  assert.match(SRC, /import\s*\{[^}]*innerAgenda[^}]*\}\s*from\s*['"]\.\/agenda\.mjs['"]/, 'patrol 必须引入 innerAgenda');
+  // ★锚点用**结构化前缀**（"内生议程(出处 " 按字面），不用"名字"——今天已栽过两次（见 ⑧ 与假警复盘）。
+  assert.ok(/signals\.push\('内生议程\(出处 ' \+/.test(SRC), '必须把内生议题 push 成发动信号，且带"出处"前缀');
+  assert.match(SRC, /不是"我想要"/, '发动信号里必须自陈不是 L3');
+  assert.match(SRC, /L2 内生议程——规则触发/, '必须写明级别与触发源');
+  // ★约束④：**在轮题优先，内生议程只作附加项** ⇒ 必须排在"议程推进"之后。
+  const iAg = SRC.indexOf("signals.push('内生议程(出处 '");
+  const iStale = SRC.indexOf("signals.push('议程推进 '");
+  assert.ok(iStale > 0 && iAg > iStale, '内生议程必须排在"议程推进"之后（P521 约束④）');
+  // ★P484：装饰件不得成为单点故障。
+  assert.match(SRC, /catch \(e\) \{ \/\* 内生议程永不阻断巡检 \*\/ \}/, '必须 fail-open');
+});
