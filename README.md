@@ -56,6 +56,10 @@ irm https://raw.githubusercontent.com/NBagent-dev/metaflywheel/main/install/inst
 curl -fsSL https://raw.githubusercontent.com/NBagent-dev/metaflywheel/main/install/install.sh | bash
 ```
 
+> **若 GitHub 不可达**（国内网络常见）：本仓同时有 gitee 镜像（`git@gitee.com:YELUZIXIAGAO/metaflywheel.git`）。可 `git clone` 该镜像后按下面的**方式 A** 手动挂载，或用 `dsh plugin add <本地克隆路径>`（方式 B）。
+>
+> **安装链已实测**（2026-10-11）：① 上面的一键安装 URL 返回 HTTP 200 且内容 = 仓库最新版（`origin` 推送后即刻生效）；② `install/sync-engine.ps1` 在 **Windows PowerShell 5.1** 下 exit 0、逐字节校验通过、中文无乱码；③ 重启宿主后引擎生效、自我快照正常渲染。
+
 以下为手动方式，按重量递增：
 
 **方式 A · 组合行直接挂载（最轻，当前推荐）**——适合已经手写组合补丁的部署：
