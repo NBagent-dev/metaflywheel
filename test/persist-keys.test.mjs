@@ -26,6 +26,8 @@ const LEDGER = process.env.MPM_LEDGER || 'C:/Users/Administrator/Desktop/daima/X
 
 /** 落盘 schema（顶层字段）。新增字段时必须同步登记，否则第二条用例会红。 */
 const EXPECTED_PERSISTED = ['seq', 'problems', 'sediments', 'lastRoot', 'patrol', 'measure', 'constitution', 'valence', 'rhythm', 'narrations'];
+/** 对象型父字段：恢复时必须"先继承再覆盖"（源对象名约定为 <x>Src）。 */
+const OBJECT_PARENTS = ['patrol', 'measure', 'constitution', 'valence'];
 /** 明确豁免 + 理由（不许默默放过任何一个）。 */
 const EXEMPT = { lastRoot: '不是 state 字段：由 e.root.current 承载，恢复时写的是 e.root.current = best.root' };
 
@@ -53,6 +55,21 @@ test('若本机有真账本：它的顶层键必须与登记的 schema 一致（
   assert.deepEqual(unregistered, [], '账本里有未登记的顶层字段（请加入 EXPECTED_PERSISTED，否则它的恢复无人看守）：' + unregistered.join('、'));
   const absent = EXPECTED_PERSISTED.filter(function (k) { return keys.indexOf(k) < 0; });
   assert.deepEqual(absent, [], '登记了但账本里不存在（schema 与实现对不上）：' + absent.join('、'));
+});
+
+test('对象型父字段：恢复必须"先继承再覆盖"（白名单重建 = 新字段静默丢失）', () => {
+  // P500 第五例（2026-10-11 实机）：`measure` 原来是白名单重建（只取 samples/driftSignals）
+  // ⇒ `measure.promiseStats`（承诺履行累计）每次重启被丢掉 ⇒ 快照出现「已叫醒 1 · 已履行 0」
+  // 的**呈现失真**：明明履行过，看起来像没履行。
+  // 规则：恢复对象先 Object.assign 源对象，再覆盖需要校验/裁剪的字段。
+  const r0 = SRC.indexOf('async function restoreImpl');
+  const block = SRC.slice(r0, SRC.indexOf('async function remapForeignSedimentsImpl', r0));
+  const bad = OBJECT_PARENTS.filter(function (k) {
+    // 第一个参数允许是空对象，也允许是"默认值对象"（如 Object.assign({ rounds: 0, … }, patrolSrc, {…})）
+    return !(new RegExp('Object\\.assign\\(\\{[^}]*\\}[^;]*?' + k + 'Src')).test(block);
+  });
+  assert.deepEqual(bad, [], '这些对象字段是白名单重建（新字段会静默丢失）：' + bad.join('、')
+    + '\n应改成：Object.assign({}, <x>Src, { …只覆盖需要校验的字段… })');
 });
 
 test('判据自证：把恢复行从源码里删掉 ⇒ 本判据必须变红（故障注入 ×2）', () => {

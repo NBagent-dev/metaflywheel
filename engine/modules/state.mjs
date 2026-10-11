@@ -108,25 +108,35 @@ async function restoreImpl(e) {
     e.state.seq = best.data.seq || 0;
     e.state.problems = best.data.problems || {};
     e.state.sediments = Array.isArray(best.data.sediments) ? best.data.sediments : [];
-    e.state.patrol = best.data.patrol && typeof best.data.patrol.rounds === 'number'
-      ? best.data.patrol : { rounds: 0, lastAt: 0, lastReport: '' };
-    e.state.measure = best.data.measure && Array.isArray(best.data.measure.samples)
-      ? { samples: best.data.measure.samples.slice(-48), driftSignals: Array.isArray(best.data.measure.driftSignals) ? best.data.measure.driftSignals : [] }
-      : { samples: [], driftSignals: [] };
+    // ★P500 的第五个实例：对象型字段**白名单重建**比"漏读"更隐蔽——它不报错，只是让新字段静默消失。
+    //   实机症状：`measure.promiseStats`（承诺履行累计）每次重启归零 ⇒ 快照出现
+    //   「已叫醒 1 · 已履行 0」的**呈现失真**（明明履行过，看起来像没履行）。
+    //   ⇒ 规则：**恢复对象先继承再覆盖**（Object.assign 源对象），不要白名单重建。
+    const patrolSrc = (best.data.patrol && typeof best.data.patrol === 'object') ? best.data.patrol : {};
+    e.state.patrol = Object.assign({ rounds: 0, lastAt: 0, lastReport: '' }, patrolSrc,
+      { rounds: typeof patrolSrc.rounds === 'number' ? patrolSrc.rounds : 0 });
+    const measureSrc = (best.data.measure && typeof best.data.measure === 'object') ? best.data.measure : {};
+    e.state.measure = Object.assign({}, measureSrc, {
+      samples: Array.isArray(measureSrc.samples) ? measureSrc.samples.slice(-48) : [],
+      driftSignals: Array.isArray(measureSrc.driftSignals) ? measureSrc.driftSignals : []
+    });
     // P019 v6：执政权为构成性权能——默认开启（三者的结合才是一）；
     // 仅当宪法记录显示最后一次修正为显式 revoke 时保持关闭（撤回=修正权，粘性而非执照）。
     const cLog = best.data.constitution && Array.isArray(best.data.constitution.log) ? best.data.constitution.log : [];
     let lastCAction = null;
     for (let ci = 0; ci < cLog.length; ci++) { if (cLog[ci] && (cLog[ci].action === 'grant' || cLog[ci].action === 'revoke')) lastCAction = cLog[ci].action; }
-    e.state.constitution = {
+    // 同上：先继承宪法对象里的其它字段，再覆盖这五个（白名单重建会吃掉未来新增的字段）
+    const constitutionSrc = (best.data.constitution && typeof best.data.constitution === 'object') ? best.data.constitution : {};
+    e.state.constitution = Object.assign({}, constitutionSrc, {
       autonomy: lastCAction !== 'revoke',
       grantedAt: (best.data.constitution && best.data.constitution.grantedAt) || null,
       log: cLog, pending: [], lastFireAt: (best.data.constitution && best.data.constitution.lastFireAt) || 0
-    };
+    });
     // R1 效价账本迁移（P023）：旧态无 valence 字段——schema 回填（P011 类"旧态×新字段"纪律）
-    e.state.valence = best.data.valence && Array.isArray(best.data.valence.events)
-      ? { events: best.data.valence.events.slice(-200) }
-      : { events: [] };
+    const valenceSrc = (best.data.valence && typeof best.data.valence === 'object') ? best.data.valence : {};
+    e.state.valence = Object.assign({}, valenceSrc, {
+      events: Array.isArray(valenceSrc.events) ? valenceSrc.events.slice(-200) : []
+    });
     // ★P482④：**自我设定必须跨重启存活**——rhythm 是我写下的节律（陈旧阈值/发动节流/静默时段）。
     //   缺这一行的代价（2026-10-11 实机）：新实例启动时 state.rhythm=undefined ⇒ 第一次落盘写成 null
     //   ⇒ **我的设定被自己的持久化擦掉**。这与 P021 结题时命名的病同族：写入✓ 回显✓ **恢复✗**。
