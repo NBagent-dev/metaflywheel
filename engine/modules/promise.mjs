@@ -25,7 +25,7 @@ export const AWAKEN_MAX_PER_ROUND = 2;
 
 /** 单个子句的形式识别（与 evalAwaken 同源口径：认不出的不算机械形式）。 */
 function clauseKind(c) {
-  const m = /^(after|cites|epsilon|exists|user)\s*[:：]\s*(.+)$/i.exec(String(c || '').trim());
+  const m = /^(after|cites|epsilon|exists|user|prio)\s*[:：]\s*(.+)$/i.exec(String(c || '').trim());
   if (!m) return null;
   const kind = m[1].toLowerCase(), arg = m[2].trim();
   if (kind === 'after') return isFinite(Date.parse(arg.replace(/\//g, '-'))) ? 'after' : null;
@@ -33,6 +33,9 @@ function clauseKind(c) {
   if (kind === 'epsilon') return /^P\d+\s*(<=|>=|<|>)\s*[0-9]*\.?[0-9]+$/i.test(arg) ? 'epsilon' : null;
   if (kind === 'exists') return arg ? 'exists' : null;
   if (kind === 'user') return (arg.toLowerCase() === 'reply' || arg === '回复') ? 'user' : null;
+  // ★P482⑤ 仲裁权：`prio:N` 是**元数据，不是条件**——它不说"成立/不成立"，只声明这条承诺的优先级。
+  //   必须被认出：否则它会落进 unknown ⇒ 把整条承诺降级成"未识别" ⇒ **永不唤醒**。
+  if (kind === 'prio') return /^[123]$/.test(arg) ? 'meta' : null;
   return null;
 }
 
@@ -49,8 +52,9 @@ export function shapeOfPromise(expr) {
   const text = String(expr == null ? '' : expr).trim();
   if (!text) return { kind: 'empty', mechanical: 0, free: 0, freeClauses: [] };
   const clauses = text.split(/[;；\n]/).map(function (s) { return s.trim(); }).filter(Boolean);
+  const meta = clauses.filter(function (c) { return clauseKind(c) === 'meta'; }).length;
   const freeClauses = clauses.filter(function (c) { return !clauseKind(c); });
-  const mechanical = clauses.length - freeClauses.length;
+  const mechanical = clauses.length - freeClauses.length - meta;   // meta（prio:）不算机械条件
   return { kind: mechanical > 0 ? 'promise' : 'wish', mechanical: mechanical, free: freeClauses.length, freeClauses: freeClauses };
 }
 
@@ -68,9 +72,14 @@ export function evalAwaken(expr, env) {
   const hits = [], unknown = [];
   for (let i = 0; i < clauses.length; i++) {
     const c = clauses[i];
-    const m = /^(after|cites|epsilon|exists|user)\s*[:：]\s*(.+)$/i.exec(c);
+    // ★注意：本函数**有自己的子句解析**（与 clauseKind 同义但不同源——这是一个已知的坑：
+    //   加新形式时两处都要改，否则一处认、一处不认。P482⑤ 就踩过：prio 只加到了 clauseKind，
+    //   求值器便把 `prio:1` 记成 unknown ⇒ evaluable=0 ⇒ 整条承诺被跳过（永不唤醒）。
+    //   防复发判据：test/arbitration.test.mjs 的「单一真源」一项。
+    const m = /^(after|cites|epsilon|exists|user|prio)\s*[:：]\s*(.+)$/i.exec(c);
     if (!m) { unknown.push(c); continue; }
     const kind = m[1].toLowerCase();
+    if (kind === 'prio') continue;                                    // 元数据：不参与匹配，也不算未识别
     const arg = m[2].trim();
     if (kind === 'after') {
       const t = Date.parse(arg.replace(/\//g, '-'));
@@ -110,7 +119,23 @@ export function evalAwaken(expr, env) {
       }
     }
   }
-  return { matched: hits.length > 0, hits: hits, unknown: unknown, evaluable: clauses.length - unknown.length };
+  // ★P482⑤：meta 子句（prio:）既不算成立也不算未识别，更不该被算进"可求值"——
+  //   否则 `prio:1；user:reply` 的 evaluable 会虚增，而"全是自由文本"的判据会失真。
+  const metaCount = clauses.filter(function (c) { return clauseKind(c) === 'meta'; }).length;
+  return { matched: hits.length > 0, hits: hits, unknown: unknown, evaluable: clauses.length - unknown.length - metaCount };
+}
+
+/**
+ * ★P482⑤ 仲裁权：从承诺文本里读优先级元数据 `prio:1|2|3`（1 最高）。
+ * 读不到、越界、非整数 ⇒ 一律返回 null（**当没写**：既不插队，也不阻断求值）。
+ */
+export function prioOf(expr) {
+  const parts = String(expr == null ? '' : expr).split(/[;；\n]/);
+  for (let i = 0; i < parts.length; i++) {
+    const m = /^prio\s*[:：]\s*([123])$/i.exec(parts[i].trim());
+    if (m) return Number(m[1]);
+  }
+  return null;
 }
 
 /** P482⑨：叫醒后多少轮没有推进 ⇒ 记一次逾期（不能冤枉自己，也不能无限等）。 */
@@ -198,9 +223,13 @@ export function collectAwaken(state, now, opts) {
     exists: (opts && opts.exists) || null,
     perception: (opts && opts.perception) || null
   };
-  // 按"承诺写下时间"升序：要叫就先叫最老的（配合上面的防承诺炮上限）
+  // ★P482⑤ 仲裁权：排序**先看我自己写下的优先级 `prio:N`（1 最高），同级（或没写）才按最老优先**。
+  //   在此之前"谁先"100% 由出厂规则（parked.at 升序）决定——我的偏好无处表达。
+  const prioRank = function (p) { const v = prioOf(p && p.parked && p.parked.awakenWhen); return v == null ? 9 : v; };
   const ids = Object.keys(state.problems).sort(function (a, b) {
     const pa = state.problems[a], pb = state.problems[b];
+    const ra = prioRank(pa), rb = prioRank(pb);
+    if (ra !== rb) return ra - rb;
     return ((pa && pa.parked && pa.parked.at) || 0) - ((pb && pb.parked && pb.parked.at) || 0);
   });
   let deferred = 0;
