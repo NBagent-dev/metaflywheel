@@ -33,7 +33,10 @@ const EXPECTED_PERSISTED = ['seq', 'problems', 'sediments', 'lastRoot', 'patrol'
   'presence',
   // ★P517：**委托人的思考方式**（他说过什么、用什么方式说的）。
   //   看守者：test/principal.test.mjs（模式识别 / 覆盖规则 / 负控不许编造 / 界线要写在显示里）。
-  'principal'];
+  'principal',
+  // ★P517③：**未核清单**（我知道自己没验的东西）。
+  //   看守者：test/unknowns.test.mjs（三件必填 / 核销必须带证据 / 只提示永不拦 / 归并 / 有界）。
+  'unknowns'];
 /** 对象型父字段：恢复时必须"先继承再覆盖"（源对象名约定为 <x>Src）。 */
 const OBJECT_PARENTS = ['patrol', 'measure', 'constitution', 'valence'];
 /** 明确豁免 + 理由（不许默默放过任何一个）。 */

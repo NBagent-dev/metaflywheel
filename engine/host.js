@@ -16,6 +16,7 @@ import { renderSelfSnapshot } from "./modules/selfsnap.mjs";
 import { throttleMsOf } from "./modules/rhythm.mjs";
 import { normalizeRules, decide, hintFor, hintLine } from "./modules/preaction.mjs";
 import { consultPrincipal } from "./modules/principal.mjs";   // ★P517②：把"源"接到动作上
+import { consultUnknowns } from "./modules/unknowns.mjs";     // ★P517③：未核清单（只提示，永不拦）
 import { fmtProblem as fmtProblemCore, buildSnapshot, directiveText as directiveTextCore } from "./modules/core.mjs";
 import { VALENCE_TAU_MS, valenceRecord as valenceRecordCore, valenceSummaryLine as valenceSummaryLineCore } from "./modules/valence.mjs";
 import { makeBoundaryGuard } from "./modules/guard.mjs";
@@ -341,6 +342,10 @@ export function apply(ctx) {
         if (tn !== 'mpm_principal' && tn !== 'mpm_flywheel_state') {
           const pc = consultPrincipal(state.principal, tn + ' ' + JSON.stringify((exec && exec.arguments) || {}));
           if (pc.verdict === 'ask') { state.preAction.ask += 1; return { kind: 'ask', reason: pc.why }; }
+          if (pc.verdict === 'hint') state.preAction.hint += 1;
+          // ★P517③：未核清单——**只提示，永不 ask/deny**（不知道的东西不许挡路，只许提醒）
+          const uc = consultUnknowns(state.unknowns, tn + ' ' + JSON.stringify((exec && exec.arguments) || {}));
+          if (uc.verdict === 'hint') state.preAction.hint += 1;
           if (pc.verdict === 'hint') { state.preAction.hint += 1; }
         }
       } catch (e3) { state.preAction.failOpen += 1; }   // fail-open：这一层坏了也不许拖垮宿主

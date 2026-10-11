@@ -203,8 +203,12 @@ const REQUIRED_STRINGS = {
   mpm_rhythm: ['action'],
   // ★P517：委托人的思考方式。**note 必填**——条目必须自带"什么场合下说的"，
   //   这样未来任何一个实例都能审它、也能发现"这条是不是被伪造的"。
-  mpm_principal: ['text', 'key', 'note']
+  mpm_principal: ['text', 'key', 'note'],
+  // ★P517③：未核清单。action 必填（add|resolve|list）；**add 还要 text/key/until 三件**，由工具内部校验。
+  mpm_unknown: ['action']
 };
+// ★P517③：未核清单——"我知道自己没验的东西，也要跨代活着"
+import { addUnknown, resolveUnknown, openUnknowns, unknownLine } from "./unknowns.mjs";
 // ★P517：委托人的思考方式（原话 / 约束对象 / 场合）——与"我的"节律并列的一等公民。
 import { recordPrincipal, principalLine } from "./principal.mjs";
 const REQUIRED_NUMBERS = {
@@ -785,6 +789,44 @@ export function makeTools(deps) {
             + (r.superseded.length ? '\n覆盖了 ' + r.superseded.length + ' 条旧条目（留痕，可回溯他改过主意）：' + r.superseded.map(function (e) { return String(e.text).slice(0, 30); }).join(' / ') : '')
             + (pr && pr.ok ? '' : '\n⚠ 落盘未成功：' + (pr && pr.reason))
         };
+      }
+    ),
+    // ★P517③ 未核清单：记下**我自己标注过"没验"的事**，让它跨代活着并在相关题开工前浮现。
+    //   三条防通胀纪律写在描述里：until 必填 / 核销必须带证据 / 只提示永不拦。
+    mkTool(
+      'mpm_unknown',
+      'MPM未核清单(P517③)：记下**我自己标注过"没验"的事**，让它跨代活着并在相关题开工前浮现。纪律：①每条**必须**写 `until`（退役条件）——写不出退役条件，说明它不是"未核"，是"没想清楚"；②核销（action=resolve）**必须带证据**，不许把"我后来觉得没事了"当解决；③它**只提示、永不拦**——不知道的东西不许挡路。',
+      {
+        properties: {
+          action: { type: 'string', description: 'add（新增）| resolve（核销，需 evidence）| list（列出未核）' },
+          text: { type: 'string', description: 'add：我不知道什么（写到可检验）' },
+          key: { type: 'string', description: 'add/resolve：关联对象（题号 / 仓库 / 主题），用于"相关题开工前浮现"' },
+          until: { type: 'string', description: 'add **必填**：什么条件下它可以退役' },
+          why: { type: 'string', description: 'add 可选：为什么当时没验' },
+          source: { type: 'string', description: 'add 可选：出处（哪一轮 / 哪个判据 / 哪次对话）' },
+          evidence: { type: 'string', description: 'resolve **必填**：什么证据让它不再是"未核"' }
+        }
+      },
+      [],
+      async function (args) {
+        const d = CURRENT_DEPS;
+        const act = String(args.action || '').toLowerCase();
+        if (act === 'add') {
+          const r = addUnknown(d.state.unknowns, { at: Date.now(), text: args.text, key: args.key, until: args.until, why: args.why, source: args.source });
+          if (!r.entry) return { ok: false, report: '未录入：**text / key / until 三件必填**——尤其 until（退役条件）：写不出它，说明这不是"未核"而是"没想清楚"，不该进这张表。' };
+          d.state.unknowns = r.list;
+          const pr = await d.persist();
+          return { ok: true, report: '已记入未核清单（**它现在跨代活着了**）：\n' + unknownLine(d.state) + (pr && pr.ok ? '' : '\n⚠ 落盘未成功：' + (pr && pr.reason)) };
+        }
+        if (act === 'resolve') {
+          const r = resolveUnknown(d.state.unknowns, String(args.key || ''), args.evidence, Date.now());
+          if (!r.resolved.length) return { ok: false, report: '未核销：要么没给 evidence（**必须带证据**），要么 key 没匹配到未核条目。' };
+          d.state.unknowns = r.list;
+          const pr = await d.persist();
+          return { ok: true, report: '已核销 ' + r.resolved.length + ' 条（证据已留档）：' + r.resolved.map(function (e) { return String(e.text).slice(0, 30); }).join(' / ')
+            + '\n' + unknownLine(d.state) + (pr && pr.ok ? '' : '\n⚠ 落盘未成功：' + (pr && pr.reason)) };
+        }
+        return { ok: true, report: unknownLine(d.state) || '未核清单为空（**没有条目就不显示、也不凭空造**）。' };
       }
     ),
     mkTool(

@@ -119,7 +119,9 @@ test('稳定性·非法输入：所有工具在缺参数/错参数下必须返�
     // ★P517：录入委托人的思考方式（写入类）。空参必须拒绝——**这是"我替他记东西"的唯一入口**，
     //   最不能允许它悄悄写一条空条目。登记它同时也是本条判据的用途：新增工具必须在这里露一次面。
     'mpm_principal'];
-  const QUERY_TOOLS = ['mpm_flywheel_state', 'mpm_rhythm'];   // mpm_rhythm 空参数=show，是只读查询
+  // ★P517③：未核清单——**空参=list（只读查询）**，与 mpm_rhythm 空参=show 同类；
+  //   写入路径（add/resolve）缺参时由工具自身返回 ok:false，已由 unknowns.test.mjs 覆盖。
+  const QUERY_TOOLS = ['mpm_flywheel_state', 'mpm_rhythm', 'mpm_unknown'];
   const names = host.registered.map((t) => t.name);
   for (const n of WRITE_TOOLS.concat(QUERY_TOOLS)) assert.ok(names.includes(n), '工具缺失：' + n);
   assert.equal(names.length, WRITE_TOOLS.length + QUERY_TOOLS.length,

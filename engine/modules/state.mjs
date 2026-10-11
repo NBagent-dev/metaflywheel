@@ -105,6 +105,7 @@ async function readStateDataImpl(e, r) {
  * 同族：P502「累加器可以被擦」——修法同样是"取 max / 从事实重算"，而不是信任存储值。
  */
 import { mergePrincipalLists } from "./principal.mjs";   // ★P517（**第 4 次"用了没引入"**：靠冷启动集成判据抓到，不是静态判据）
+import { mergeUnknowns } from "./unknowns.mjs";          // ★P517③：未核清单（记忆的另一半：我不知道的东西）
 
 export function mergePresenceInto(perception, lastActive, pres) {
   if (!pres) return false;                       // 负控：没有磁盘证据 ⇒ 什么都不做（不许凭空造）
@@ -191,6 +192,8 @@ async function restoreImpl(e) {
     //   与 presence 的区别：presence 记"他在不在"，principal 记"他怎么想"。
     //   归并而非覆盖（P514 纪律：懒加载的恢复可能晚于本轮已录入的条目）。
     e.state.principal = mergePrincipalLists(e.state.principal, (best.data && best.data.principal) || []);
+    // ★P517③：**未核清单**——与 principal 配成一对（那记"我知道的"，这记"我不知道的"）。归并而非覆盖。
+    e.state.unknowns = mergeUnknowns(e.state.unknowns, (best.data && best.data.unknowns) || []);
     // Schema migration on restore: backfill fields introduced after a
     // problem was first persisted. Never assume new fields exist on old state.
     for (const bk in e.state.problems) {
@@ -298,6 +301,8 @@ async function persistImpl(e) {
     // ★P517：委托人的表态/思考方式。**空数组也落盘**（与 narrations 同）：schema 交叉核对要求
     //   "登记了就必须在账本里存在"，否则"没录过"与"恢复了但没写"无法区分。
     principal: Array.isArray(e.state.principal) ? e.state.principal.slice(-200) : [],
+    // ★P517③：未核清单（我知道自己没验的东西）。空数组也落盘（schema 口径同 principal）。
+    unknowns: Array.isArray(e.state.unknowns) ? e.state.unknowns.slice(-200) : [],
     // ★P511：用户在场证据——**没观测到就省略（undefined），不写 0/null**：
     //   写 0 会伪造"用户从未说过话"，写 null 会擦掉磁盘上已有的值（rhythm 那次就是这么丢的）。
     presence: (function () {
