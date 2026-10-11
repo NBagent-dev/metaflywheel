@@ -91,6 +91,34 @@ async function readStateDataImpl(e, r) {
   } catch (e) { return null; }
 }
 
+/**
+ * ★P511 续：把磁盘上的"在场证据"**归并**进宿主态——**取 max，不覆盖**。
+ *
+ * 为什么必须是归并（2026-10-11，代码结构证据，不是观测证据）：
+ *   `ensureLoaded` 是**懒加载**（第一次需要账本时才恢复），而
+ *   `ctx.on('agent/created')`（events.mjs:165）在**会话创建时同步**就把 sessionStarts +1、
+ *   `ctx.on('...inbox...')` 同步把 inboxCount +1 并写 lastInboxAt。
+ *   ⇒ 只要有事件**早于首次 ensureLoaded** 到达，直接赋值就会把它抹掉。
+ *   （当时那条观测 `sessionStarts=1` 是**双重歧义**的：磁盘 1 与事件 1 恰好相同，
+ *     "覆盖"与"归并"给出同一个数 ⇒ **不能拿它当证据**。真正的证据是上面这条结构事实。）
+ * 语义：这类量只增不减（计数与时间戳）⇒ max 既安全又正确；agentId 只在为空时补（不盖掉本轮的）。
+ * 同族：P502「累加器可以被擦」——修法同样是"取 max / 从事实重算"，而不是信任存储值。
+ */
+export function mergePresenceInto(perception, lastActive, pres) {
+  if (!pres) return false;                       // 负控：没有磁盘证据 ⇒ 什么都不做（不许凭空造）
+  let touched = false;
+  if (perception) {
+    if (typeof pres.lastInboxAt === 'number' && pres.lastInboxAt > (perception.lastInboxAt || 0)) { perception.lastInboxAt = pres.lastInboxAt; touched = true; }
+    if (typeof pres.inboxCount === 'number' && pres.inboxCount > (perception.inboxCount || 0)) { perception.inboxCount = pres.inboxCount; touched = true; }
+    if (typeof pres.sessionStarts === 'number' && pres.sessionStarts > (perception.sessionStarts || 0)) { perception.sessionStarts = pres.sessionStarts; touched = true; }
+  }
+  if (lastActive) {
+    if (typeof pres.lastActiveAt === 'number' && pres.lastActiveAt > (lastActive.at || 0)) { lastActive.at = pres.lastActiveAt; touched = true; }
+    if (typeof pres.lastActiveAgent === 'string' && pres.lastActiveAgent && !lastActive.agentId) { lastActive.agentId = pres.lastActiveAgent; touched = true; }
+  }
+  return touched;
+}
+
 // ── restore ────────────────────────────────────────────
 async function restoreImpl(e) {
   if (!e.fsSvc) return;
@@ -154,17 +182,8 @@ async function restoreImpl(e) {
     {
       const pres = (best.data && best.data.presence) || null;
       e.state.presence = pres;
-      if (pres) {
-        if (e.perception) {
-          if (typeof pres.lastInboxAt === 'number') e.perception.lastInboxAt = pres.lastInboxAt;
-          if (typeof pres.inboxCount === 'number') e.perception.inboxCount = pres.inboxCount;
-          if (typeof pres.sessionStarts === 'number') e.perception.sessionStarts = pres.sessionStarts;
-        }
-        if (e.lastActive) {
-          if (typeof pres.lastActiveAt === 'number' && pres.lastActiveAt > 0) e.lastActive.at = pres.lastActiveAt;
-          if (typeof pres.lastActiveAgent === 'string' && pres.lastActiveAgent) e.lastActive.agentId = pres.lastActiveAgent;
-        }
-      }
+      // ★**归并而不是覆盖**——懒加载的恢复可能晚于本轮已发生的事件（详见 mergePresenceInto 的注释）。
+      mergePresenceInto(e.perception, e.lastActive, pres);
     }
     // Schema migration on restore: backfill fields introduced after a
     // problem was first persisted. Never assume new fields exist on old state.

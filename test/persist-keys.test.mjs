@@ -25,7 +25,12 @@ const SRC = fs.readFileSync(SRC_URL, 'utf8');
 const LEDGER = process.env.MPM_LEDGER || 'C:/Users/Administrator/Desktop/daima/XIN/.mpm/flywheel.json';
 
 /** 落盘 schema（顶层字段）。新增字段时必须同步登记，否则第二条用例会红。 */
-const EXPECTED_PERSISTED = ['seq', 'problems', 'sediments', 'lastRoot', 'patrol', 'measure', 'constitution', 'valence', 'rhythm', 'narrations'];
+const EXPECTED_PERSISTED = ['seq', 'problems', 'sediments', 'lastRoot', 'patrol', 'measure', 'constitution', 'valence', 'rhythm', 'narrations',
+  // ★P511：用户在场证据（perception 快照 + lastActive）。**看守者**：
+  //   test/presence-persist.test.mjs（两个方向 + 端到端 + 接线）与
+  //   test/presence-merge.test.mjs（归并而非覆盖，调 engines 自己的 mergePresenceInto）。
+  //   它是被**本条判据**逼着登记的——加完字段两秒后就报红："否则它的恢复无人看守"。
+  'presence'];
 /** 对象型父字段：恢复时必须"先继承再覆盖"（源对象名约定为 <x>Src）。 */
 const OBJECT_PARENTS = ['patrol', 'measure', 'constitution', 'valence'];
 /** 明确豁免 + 理由（不许默默放过任何一个）。 */
