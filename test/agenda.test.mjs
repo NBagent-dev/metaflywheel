@@ -28,14 +28,24 @@ test('②已核销的未核 ⇒ **不再提**（核销过的东西不许反复�
   assert.equal(innerAgenda(st, 2000).length, 0);
 });
 
-test('③反复命中：同一 key ≥' + HIT_REPEAT_MIN + ' 次 ⇒ 提；2 次 ⇒ **负控不提**', () => {
-  const two = { hits: [hit(1, 'K'), hit(2, 'K')] };
-  assert.equal(innerAgenda(two, 3000).length, 0, '2 次不到阈值，不许提');
-  const three = { hits: [hit(1, 'K'), hit(2, 'K'), hit(3, 'K')] };
+test('③反复命中：同一 key ≥' + HIT_REPEAT_MIN + ' 次【且仍有欠账】⇒ 提；2 次 ⇒ **负控不提**', () => {
+  // ★★2026-10-11 修订（P523）：旧夹具用的是 `hit()`（`disposedAt: at + 1` ⇒ **全部已处置、无 stillOpen**），
+  //   而**那恰恰是"它只是我的工作主题"那一类**——现场：28 次全部已处置，内生议程却报「…而是没被解决」= 误报。
+  //   ⇒ 触发条件补上【存在欠账】：`未处置` 或 `stillOpen === true`。
+  //   ⇒ 本判据改用**未处置**的命中来考"≥3 次 ⇒ 提"的原意；
+  //      "全部已处置 ⇒ 不提"由 test/hit-discriminator.test.mjs 判据① 看守（两条判据各管一半）。
+  const hitOpen = (at, key) => ({ id: 'H' + at, at, key, tool: 't', verdict: 'hint', disposedAt: null });
+  const two = { hits: [hitOpen(1, 'K'), hitOpen(2, 'K')] };
+  assert.equal(innerAgenda(two, 3000).length, 0, '2 次不到阈值，不许提（负控）');
+  const three = { hits: [hitOpen(1, 'K'), hitOpen(2, 'K'), hitOpen(3, 'K')] };
   const a = innerAgenda(three, 4000);
   assert.equal(a.length, 1);
   assert.equal(a[0].ref, 'hits:K');
-  assert.match(a[0].because, /没被解决/, '理由要指向"可能是没解决"，而不是"提醒不够"');
+  assert.match(a[0].because, /未处置|仍未解决/, '理由必须指向账本里可核对的事实，不许是"通常…而是…"这类格言');
+  // ★负控（新增）：全部已处置且无 stillOpen ⇒ **不得产出**
+  const threeDisposed = { hits: [hit(1, 'K'), hit(2, 'K'), hit(3, 'K')] };
+  assert.equal(innerAgenda(threeDisposed, 4000).length, 0,
+    '★现场复现：28 次全部已处置且无 stillOpen ⇒ 不产出——那是我这一轮的工作主题，不是欠账');
 });
 
 test('④零引用沉积：>=' + STALE_DEPOSIT_DAYS + ' 天才提；新的不提（负控）', () => {

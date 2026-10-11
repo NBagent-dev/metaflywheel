@@ -33,7 +33,9 @@ export function normalizeHit(e) {
     text: String(e.text || '').trim(),
     entryId: String(e.entryId || '').trim(),
     myAction: String(e.myAction || '').trim(),
-    disposedAt: (typeof e.disposedAt === 'number') ? e.disposedAt : null
+    disposedAt: (typeof e.disposedAt === 'number') ? e.disposedAt : null,
+    // ★P523：处置时勾选"我处置了，但这件事仍未解决" —— **结构化字段，不靠猜文本**
+    stillOpen: e.stillOpen === true
   };
 }
 
@@ -48,8 +50,10 @@ export function recordHit(list, hit) {
   return { list: arr.length > HIT_MAX ? arr.slice(-HIT_MAX) : arr, entry: rec };
 }
 
-/** 处置留痕（"我如何处置"）。**必须给 myAction** —— 空处置不算处置。 */
-export function disposeHit(list, idOrKey, myAction, at) {
+/** 处置留痕（"我如何处置"）。**必须给 myAction** —— 空处置不算处置。
+ *  ★P523 第 5 参 `stillOpen`：**我处置了，但这件事仍未解决**——
+ *  它是 hit-repeat 区分器的唯一结构化依据（见 outstandingHits）。 */
+export function disposeHit(list, idOrKey, myAction, at, stillOpen) {
   const act = String(myAction || '').trim();
   const arr = Array.isArray(list) ? list.slice() : [];
   if (!act) return { list: arr, disposed: [] };
@@ -59,7 +63,7 @@ export function disposeHit(list, idOrKey, myAction, at) {
     const e = arr[i];
     if (!e || e.disposedAt) continue;
     if (e.id === idOrKey || e.key === idOrKey) {
-      arr[i] = Object.assign({}, e, { myAction: act, disposedAt: now });
+      arr[i] = Object.assign({}, e, { myAction: act, disposedAt: now, stillOpen: stillOpen === true });
       disposed.push(arr[i]);
       break;
     }
@@ -70,6 +74,23 @@ export function disposeHit(list, idOrKey, myAction, at) {
 /** 未处置的命中（**回流的核心可见面**）。 */
 export function openHits(list) {
   return (Array.isArray(list) ? list : []).filter(function (e) { return e && !e.disposedAt; });
+}
+
+/**
+ * ★P523 **欠账**（hit-repeat 区分器的唯一判据，单一真源）：
+ *   `未处置` **或** `stillOpen === true`（处置时明确标了"仍未解决"）。
+ *
+ * ★为什么必须是结构化字段而不是关键词：
+ *   今天已栽过三次"判据量的是代理词"（`/我想要/` · `/内生议程/` · 断言范围越界）。
+ *   若用"处置文本里有没有'未解决'"去猜，等于**又量了一次代理词**——字段不携带歧义。
+ *
+ * 现场（2026-10-11）：内生议程报「同一件事被提醒了 28 次…而是没被解决」，
+ *   而 28 次**全部已处置**、无一处标 stillOpen ⇒ **那是误报**（它只是我这一轮的工作主题）。
+ */
+export function outstandingHits(list) {
+  return (Array.isArray(list) ? list : []).filter(function (e) {
+    return e && (!e.disposedAt || e.stillOpen === true);
+  });
 }
 
 /** 归并（恢复纪律：并集 + 按 id 去重，沿用 P514/P517/P519 同一条）。 */
@@ -95,11 +116,13 @@ export function hitsLine(state, limit) {
   if (!all.length) return '';
   const open = openHits(all);
   const n = (typeof limit === 'number' && limit > 0) ? limit : 3;
+  const stillN = all.filter(function (e) { return e && e.disposedAt && e.stillOpen === true; }).length;
   const recent = all.slice(-n).map(function (e) {
-    const mark = e.disposedAt ? '已处置' : '**未处置**';
+    const mark = !e.disposedAt ? '**未处置**' : (e.stillOpen === true ? '**处置了但仍未解决**' : '已处置');
     return '「' + String(e.text || e.key).slice(0, 30) + '」(' + e.key + '·' + e.verdict + '·' + mark + ')';
   });
   return '- 命中回流(P519·**源→行为→记录→源**)：命中 ' + all.length + ' 次 · **未处置 ' + open.length + ' 次**'
+    + (stillN ? ' · **处置了但仍未解决 ' + stillN + ' 次**' : '')
     + (recent.length ? '：' + recent.join(' · ') : '')
     + (open.length
       ? '——**未处置是我欠的账**：命中了却没说清怎么处置，等于没被约束过（用 `mpm_hit action=dispose` 留痕）。'

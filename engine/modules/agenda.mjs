@@ -19,6 +19,9 @@
 //   而是"我的账本开始替我说该做什么"——不是学会了自己想要，是学会了"自己的状态"要求什么。**
 
 export const AGENDA_MAX = 3;            // 一次最多提几条（有界，防议题通胀）
+// ★P523：hit-repeat 的区分器要用【欠账】的唯一定义（单一真源在 hits.mjs）——
+//   绝不在这里再写一遍"什么算欠账"，否则两处同义代码会各自漂移（P507 的教训）。
+import { outstandingHits } from './hits.mjs';
 export const HIT_REPEAT_MIN = 3;        // 同一 key 被命中 ≥3 次 ⇒ 值得看一眼
 export const STALE_DEPOSIT_DAYS = 14;   // 沉积 ≥14 天且零引用 ⇒ 提醒（与 M9② 降权同口径）
 export const LEVEL = 'L2';              // 本模块只产出 L2；L3 不在机制内
@@ -47,17 +50,25 @@ export function innerAgenda(state, now) {
     });
   }
 
-  // ② 反复命中：同一件事被提醒多次 ⇒ 那可能是一个**没解决的问题**
+// ② 反复命中：**但"反复出现"不等于"没被解决"**（P523-M440 的教训）。
+//   ★区分器（**结构化，不猜文本**）：欠账 = `未处置` 或 `stillOpen === true`（单一真源在 hits.mjs）。
+//     2026-10-11 实测现场：28 次命中**全部已处置**、无一处标"仍未解决" ⇒ 它只是我这一轮的**工作主题**；
+//     而上一版照样报了「同一件事被提醒了 28 次……而是没被解决」——**那是误报**。
+//   ★★并且：`because` 从【格言】改成【账本里可核对的事实】——
+//     旧：「反复命中的东西通常不是"提醒不够"，而是**没被解决**」（这是猜测）
+//     新：「其中 M 次是未处置 / 处置时明确标了'仍未解决'」（这是账本）
   const hits = Array.isArray(st.hits) ? st.hits : [];
-  const byKey = Object.create(null);
-  for (const h of hits) { if (h && h.key) byKey[h.key] = (byKey[h.key] || 0) + 1; }
-  for (const k of Object.keys(byKey)) {
-    if (byKey[k] < HIT_REPEAT_MIN) continue;             // 负控：2 次不提
+  const total = Object.create(null), owed = Object.create(null);
+  for (const h of hits) { if (h && h.key) total[h.key] = (total[h.key] || 0) + 1; }
+  for (const h of outstandingHits(hits)) { if (h && h.key) owed[h.key] = (owed[h.key] || 0) + 1; }
+  for (const k of Object.keys(total)) {
+    if (total[k] < HIT_REPEAT_MIN) continue;             // 负控：2 次不提
+    if (!owed[k]) continue;                              // ★★负控：全已处置且无 stillOpen ⇒ 不产出
     out.push({
       kind: 'hit-repeat', level: LEVEL, ref: 'hits:' + k, key: k,
-      text: '同一件事被提醒了 ' + byKey[k] + ' 次：「' + k + '」',
-      because: '反复命中的东西通常不是"提醒不够"，而是**没被解决**——值得单独看一眼',
-      weight: 20 + byKey[k]
+      text: '同一件事被提醒了 ' + total[k] + ' 次：「' + k + '」，其中 **' + owed[k] + ' 次仍未解决**',
+      because: '其中 ' + owed[k] + ' 次是【未处置】或处置时明确标了"仍未解决"（账本里可核对，不是推测）',
+      weight: 20 + owed[k]
     });
   }
 

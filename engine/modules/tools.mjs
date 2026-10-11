@@ -839,13 +839,14 @@ export function makeTools(deps) {
     //   与 P482⑨「承诺的最后一米」同构：写下→叫醒→履行→**清账**，缺的是清账。
     mkTool(
       'mpm_hit',
-      'MPM回流(P519)：查看/清账**命中记录**——"他在动手前提醒过我什么，我当时的处置是什么"。纪律：①命中由引擎在 pre-execute 自动记录（不是我自报）；②清账（action=dispose）**必须给 myAction**——空处置不算处置；③**未处置必须可见**：命中却没说清怎么处置，等于没被约束过。',
+      'MPM回流(P519)：查看/清账**命中记录**——"他在动手前提醒过我什么，我当时的处置是什么"。纪律：①命中由引擎在 pre-execute 自动记录（不是我自报）；②清账（action=dispose）**必须给 myAction**——空处置不算处置；③**未处置必须可见**：命中却没说清怎么处置，等于没被约束过；④★**处置 ≠ 解决**：若这件事仍然挂着，dispose 时请传 `stillOpen: true`——内生议程的"反复命中"只看**欠账**（未处置 或 stillOpen），否则它会把"我的工作主题"误报成"没被解决"。',
       {
         properties: {
           action: { type: 'string', description: 'list（默认，列出命中与处置）| dispose（清账，需 myAction）' },
           key: { type: 'string', description: 'dispose：按约束对象清账（从最新往前一条）' },
           id: { type: 'string', description: 'dispose：按命中 id 精确清账（优先于 key）' },
-          myAction: { type: 'string', description: 'dispose **必填**：我当时如何处置（必须可被下一次观测校验）' }
+          myAction: { type: 'string', description: 'dispose **必填**：我当时如何处置（必须可被下一次观测校验）' },
+          stillOpen: { type: 'boolean', description: 'dispose 可选：**我处置了，但这件事仍未解决**——勾上它，内生议程的"反复命中"才不会把"已处置"误当"已解决"（不勾 = 真的解决了）' }
         }
       },
       [],
@@ -853,7 +854,7 @@ export function makeTools(deps) {
         const d = CURRENT_DEPS;
         const act = String(args.action || 'list').toLowerCase();
         if (act === 'dispose') {
-          const r = disposeHit(d.state.hits, String(args.id || args.key || ''), args.myAction, Date.now());
+          const r = disposeHit(d.state.hits, String(args.id || args.key || ''), args.myAction, Date.now(), args.stillOpen);
           if (!r.disposed.length) return { ok: false, report: '未清账：要么没给 myAction（**空处置不算处置**），要么 id/key 没匹配到未处置的命中记录。' };
           d.state.hits = r.list;
           const pr = await d.persist();
