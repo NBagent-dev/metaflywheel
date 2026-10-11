@@ -207,11 +207,14 @@ const REQUIRED_STRINGS = {
   // ★P517③：未核清单。action 必填（add|resolve|list）；**add 还要 text/key/until 三件**，由工具内部校验。
   mpm_unknown: ['action'],
   // ★P519：回流。action 必填（list|dispose）；dispose 还要 myAction（**空处置不算处置**）。
-  mpm_hit: ['action']
+  mpm_hit: ['action'],
+  // ★P526：采用。action 必填（add|list）；add 还要 sedimentId/forWhat/withoutIt 三件（由工具内部校验）。
+  mpm_adopt: ['action']
 };
 // ★P517③：未核清单——"我知道自己没验的东西，也要跨代活着"
 import { addUnknown, resolveUnknown, openUnknowns, unknownLine } from "./unknowns.mjs";
 import { disposeHit, openHits, hitsLine } from "./hits.mjs";   // ★P519 回流
+import { recordAdopt, adoptRate, adoptLine } from "./adopt.mjs";  // ★P526 采用
 // ★P517：委托人的思考方式（原话 / 约束对象 / 场合）——与"我的"节律并列的一等公民。
 import { recordPrincipal, principalLine } from "./principal.mjs";
 const REQUIRED_NUMBERS = {
@@ -860,6 +863,38 @@ export function makeTools(deps) {
         const open = openHits(d.state.hits);
         return { ok: true, report: (hitsLine(d.state) || '（还没有命中记录——**没有就不显示，也不凭空造**）')
           + (open.length ? '\n未处置 ' + open.length + ' 条待清账。' : '') };
+      }
+    ),
+    // ★P526 采用：**动手前检索并真的采用**——把"某条沉积改变了我的做法"记下来。
+    //   与 mpm_deposit 的 links 的区别是全部要点：links 是【事后补链】，本工具是【动手前采用】。
+    mkTool(
+      'mpm_adopt',
+      'MPM采用(P526)：**动手前检索并真的采用**——把"某条沉积改变了我的做法"记下来。与 `mpm_deposit` 的 `links` 的区别是全部要点：links 是【事后补链】（写完了才想起来有关系），本工具是【动手前采用】（做决定之前用了它，并且它改变了做法）。纪律：①`sedimentId`/`forWhat`/`withoutIt` **三件必填**——尤其 **「没有它我会怎么做」**（写不出反事实，就不是采用）；②同一 (沉积, 决定) 只计一次；③**回环率只数本工具**——补链永远不会提高它。',
+      {
+        properties: {
+          action: { type: 'string', description: 'add（记一次采用）| list（看回环率与最近采用）' },
+          sedimentId: { type: 'string', description: 'add **必填**：采用了哪条沉积（如 P521-M438）' },
+          forWhat: { type: 'string', description: 'add **必填**：用于哪个决定 / 哪段产出' },
+          withoutIt: { type: 'string', description: 'add **必填**：**没有它我会怎么做**（反事实——写不出它，就不是采用）' }
+        }
+      },
+      [],
+      async function (args) {
+        const d = CURRENT_DEPS;
+        const act = String(args.action || 'list').toLowerCase();
+        if (act === 'add') {
+          const r = recordAdopt(d.state.adopts, {
+            at: Date.now(), sedimentId: args.sedimentId, forWhat: args.forWhat, withoutIt: args.withoutIt
+          });
+          if (!r.entry) return { ok: false, report: '未记入：' + r.reason };
+          d.state.adopts = r.list;
+          const pr = await d.persist();
+          const rate = adoptRate(d.state);
+          return { ok: true, report: '已记一次采用（**回环率 ' + rate.rate + '%**：' + rate.adopted + '/' + rate.total + '）：'
+            + r.entry.sedimentId + ' 用于「' + r.entry.forWhat + '」——没有它：' + r.entry.withoutIt
+            + (pr && pr.ok ? '' : '\n⚠ 落盘未成功：' + (pr && pr.reason)) };
+        }
+        return { ok: true, report: adoptLine(d.state) || '（还没有采用记录——**回环率 0%**：检索到的沉积一次都还没被真的用上）' };
       }
     ),
     mkTool(
