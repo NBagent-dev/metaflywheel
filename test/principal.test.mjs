@@ -47,7 +47,10 @@ test('④负控·不许静默：被覆盖的条目不进"有效"计数，但总�
   list = recordPrincipal(list, { at: 1000, key: 'A', text: '不要做 A' }).list;
   list = recordPrincipal(list, { at: 2000, key: 'A', text: '可以做 A' }).list;
   const line = principalLine({ principal: list });
-  assert.match(line, /共 2 条（有效 1 · 否决 0）/, '否决被覆盖后不再计入有效否决：' + line);
+  // ★P520 修正锚点：原来把整串写死（`共 2 条（有效 1 · 否决 0）`），
+  //   而显示里插进了"已覆盖 N"一个新字段 ⇒ **假警**。⇒ 只约束"意图"（总数/有效数/否决数），
+  //   不约束字段顺序与新字段 —— 又一次"锚点随实现漂移"（P487-M405）。
+  assert.match(line, /共 2 条（[^）]*有效 1[^）]*否决 0[^）]*）/, '否决被覆盖后不再计入有效否决：' + line);
 });
 
 test('⑤残缺输入不制造垃圾条目：缺 key 或缺 text ⇒ 不录入', () => {
@@ -70,4 +73,38 @@ test('⑥行文必须自带边界（不可逾越的那条界线要在快照里�
   const line = principalLine({ principal: list });
   assert.match(line, /不冒充"他在乎什么"的来源/, '界线必须写在显示里，不是只写在代码注释里');
   assert.match(line, /必须显式请求复核/, '可推翻通道必须写明');
+});
+
+// ── ★P520：源的演化（判据①②③）──────────────────────────────
+
+test('⑧★P520：**"已覆盖"必须可见** —— 否则"他改过主意"等于没发生（演化等于没发生）', () => {
+  let l = recordPrincipal([], { at: 1000, key: '项目定位', text: '旧说法' }).list;
+  l = recordPrincipal(l, { at: 2000, key: '项目定位', text: '新说法' }).list;
+  const line = principalLine({ principal: l });
+  assert.match(line, /已覆盖 1/, line);
+  assert.match(line, /他改过主意/, '必须写明这是"他改过主意"的留痕');
+  assert.match(line, /旧说法/, '旧条目的痕迹要能看见');
+  assert.equal(activeFor(l, '项目定位').text, '新说法', 'activeFor 必须返回新条目');
+});
+
+test('⑨★P520 震荡守卫：同一 key 窗口内被反复覆盖 ⇒ 提示"源在震荡"；不同 key 不报', () => {
+  const now = Date.now();
+  let l = [];
+  for (let i = 0; i < 4; i++) l = recordPrincipal(l, { at: now - 3000 + i * 500, key: '项目定位', text: '第' + (i + 1) + '版说法' }).list;
+  assert.equal(l.filter(function (e) { return e.supersededBy; }).length, 3, '应产生 3 条被覆盖条目');
+  assert.match(principalLine({ principal: l }), /源在震荡/, '反复覆盖必须被提示');
+  // 负控：两个 key 各覆盖一次 ⇒ 各 1 次，不到阈值，不许报
+  let m = [];
+  m = recordPrincipal(m, { at: now - 3000, key: 'A', text: 'a1' }).list;
+  m = recordPrincipal(m, { at: now - 2500, key: 'A', text: 'a2' }).list;
+  m = recordPrincipal(m, { at: now - 2000, key: 'B', text: 'b1' }).list;
+  m = recordPrincipal(m, { at: now - 1500, key: 'B', text: 'b2' }).list;
+  assert.ok(!/源在震荡/.test(principalLine({ principal: m })), '不同 key 各覆盖一次不该报震荡');
+});
+
+test('⑩负控：没有被覆盖的条目 ⇒ 显示"已覆盖 0"，且不出现"他改过主意"那一段', () => {
+  const l = recordPrincipal([], { at: Date.now(), key: 'K', text: 'T' }).list;
+  const line = principalLine({ principal: l });
+  assert.match(line, /已覆盖 0/);
+  assert.ok(!/他改过主意/.test(line), '没有覆盖就不许显示覆盖留痕：' + line);
 });

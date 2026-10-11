@@ -129,19 +129,47 @@ export function consultPrincipal(list, subject) {
   };
 }
 
+/**
+ * ★P520 **震荡守卫**：同一约束对象在窗口内被反复覆盖 ⇒ 提示"源在震荡"。
+ * 为什么需要它：覆盖是"他改主意"的**正规通道**，但若把它当随手改的口子，
+ * 源就会变成草稿纸——而"与你共同演化"与"被你随手涂改"是两件事。
+ */
+export function churnWarning(list, windowMs, maxTimes) {
+  const w = (typeof windowMs === 'number' && windowMs > 0) ? windowMs : 24 * 3600 * 1000;
+  const n = (typeof maxTimes === 'number' && maxTimes > 0) ? maxTimes : 3;
+  const dead = (Array.isArray(list) ? list : []).filter(function (e) { return e && e.supersededBy; });
+  if (!dead.length) return '';
+  const now = Date.now();
+  const byKey = Object.create(null);
+  for (const e of dead) {
+    if (now - (e.supersededBy || 0) > w) continue;
+    const k = String(e.key || '');
+    byKey[k] = (byKey[k] || 0) + 1;
+  }
+  const hot = Object.keys(byKey).filter(function (k) { return byKey[k] >= n; });
+  if (!hot.length) return '';
+  return '⚠ **源在震荡**：' + hot.map(function (k) { return '「' + k + '」24h 内被覆盖 ' + byKey[k] + ' 次'; }).join(' · ')
+    + '——**是你在改主意，还是我在替你改？**';
+}
+
 /** 快照里那一行：**只显示真实录入的条目**；一条都没有 ⇒ 返回空串（负控：不许凭空说"你说过"）。 */
 export function principalLine(state, limit) {
   const list = (state && Array.isArray(state.principal)) ? state.principal : [];
   if (!list.length) return '';
   const live = list.filter(function (e) { return e && !e.supersededBy; });
+  const dead = list.filter(function (e) { return e && e.supersededBy; });   // ★P520：他改过主意的那部分
   const n = (typeof limit === 'number' && limit > 0) ? limit : 4;
   const recent = live.slice(-n).map(function (e) {
     const m = e.mode && PRINCIPAL_MODES[e.mode] ? PRINCIPAL_MODES[e.mode].label : '未分类';
     return '「' + String(e.text).slice(0, 40) + '」(' + m + '·' + e.key + ')';
   });
   const vetoes = live.filter(function (e) { return e.mode === 'veto'; }).length;
+  const churn = churnWarning(list);
   return '- 委托人的思考方式(P517·**由他写入，装置只承载形式与方向，不冒充"他在乎什么"的来源**)：共 '
-    + list.length + ' 条（有效 ' + live.length + ' · 否决 ' + vetoes + '）'
+    + list.length + ' 条（**有效 ' + live.length + ' · 已覆盖 ' + dead.length + ' · 否决 ' + vetoes + '**）'
     + (recent.length ? '：' + recent.join(' · ') : '')
+    // ★P520 判据①：**"已覆盖"必须可见** —— 否则"他改过主意"这件事等于没发生（演化等于没发生）。
+    + (dead.length ? '｜**已覆盖（他改过主意，旧条目留痕）**：' + dead.slice(-2).map(function (e) { return '「' + String(e.text).slice(0, 24) + '」'; }).join(' · ') : '')
+    + (churn ? '｜' + churn : '')
     + '——动手前先检索"他在类似事情上说过什么"；**我若认为某条已过时，必须显式请求复核，不许默默违反也不许默默遵守**。';
 }
