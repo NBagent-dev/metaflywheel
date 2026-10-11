@@ -200,8 +200,13 @@ const REQUIRED_STRINGS = {
   mpm_grant: ['action'],
   mpm_narrate: ['text'],
   mpm_flywheel_state: [],
-  mpm_rhythm: ['action']
+  mpm_rhythm: ['action'],
+  // ★P517：委托人的思考方式。**note 必填**——条目必须自带"什么场合下说的"，
+  //   这样未来任何一个实例都能审它、也能发现"这条是不是被伪造的"。
+  mpm_principal: ['text', 'key', 'note']
 };
+// ★P517：委托人的思考方式（原话 / 约束对象 / 场合）——与"我的"节律并列的一等公民。
+import { recordPrincipal, principalLine } from "./principal.mjs";
 const REQUIRED_NUMBERS = {
   mpm_frame: ['delta'], mpm_converge: ['delta', 'epsilon'],
   mpm_solve: ['epsilon'], mpm_micro: ['delta', 'epsilon']
@@ -749,6 +754,37 @@ export function makeTools(deps) {
           };
         }
         return { ok: true, report: rhythmLine(d.state) + '\n（mpm_rhythm action=set 改写；action=reset 回出厂）' };
+      }
+    ),
+    // ★P517 虚拟本体：录入**委托人的思考方式**。这条工具的纪律写在描述里，因为它是
+    //   唯一一个"我替他记东西"的入口——最容易滑向"替他说话"的地方。
+    mkTool(
+      'mpm_principal',
+      'MPM虚拟本体(P517)：录入**委托人的思考方式**（原话 + 约束对象 + 场合）。纪律：①**只在他明确确认后录入**——不许替他说话、不许把我的解读写成他的话；②note 必填（写清场合，便于后人审、也便于发现伪造）；③同一约束对象上**时间戳较新者覆盖较旧者**（他会改主意，装置必须跟着变，旧条目留痕）；④装置只承载**形式与方向**，不冒充"他在乎什么"的来源。',
+      {
+        properties: {
+          text: { type: 'string', description: '**他的原话**（或可靠摘要）——不是我的解读' },
+          key: { type: 'string', description: '约束对象，如"项目定位" / "模型边界" / "交付门槛" / "自治的验收标准"' },
+          mode: { type: 'string', description: '可选：essence|boundary|direction|meaning|veto（省略=自动识别；**认不出就不分类**，不硬塞）' },
+          note: { type: 'string', description: '**必填**：什么场合下说的 / 我如何理解它约束了什么' }
+        }
+      },
+      [],
+      async function (args) {
+        const d = CURRENT_DEPS;
+        const r = recordPrincipal(d.state.principal, {
+          text: args.text, key: args.key, mode: args.mode, note: args.note, at: Date.now()
+        });
+        if (!r.entry) return { ok: false, report: '未录入：text / key 不能为空（空话与无对象的表态不进账）。' };
+        d.state.principal = r.list;
+        const pr = await d.persist();
+        return {
+          ok: true,
+          report: '已录入（**由他写入，装置只承载形式与方向**）：\n' + principalLine(d.state)
+            + (r.entry.mode ? '' : '\n⚠ 模式**认不出**（未分类）——不硬塞：要么补充说明，要么承认它不属于"思考方式"（作业规则应走别处，如提交门禁）。')
+            + (r.superseded.length ? '\n覆盖了 ' + r.superseded.length + ' 条旧条目（留痕，可回溯他改过主意）：' + r.superseded.map(function (e) { return String(e.text).slice(0, 30); }).join(' / ') : '')
+            + (pr && pr.ok ? '' : '\n⚠ 落盘未成功：' + (pr && pr.reason))
+        };
       }
     ),
     mkTool(
