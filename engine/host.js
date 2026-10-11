@@ -173,10 +173,24 @@ export function apply(ctx) {
   // P332/P171 落地：运行期自陈。启动只记纯本地量（bootAt/pid/argv1），文件探测懒做、结果缓存。
   // 为什么放在这里而不是 patrol：patrol 要等 20 分钟，而"我刚换了磁盘、跑的还是旧的"这件事
   // 必须在**第一次装配**就可见——那正是今天错过的那一刻。
-  const ENGINE_FILES = [
-    new URL('./host.js', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'),
-    new URL('./modules/selfsnap.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
-  ];
+  // ★P507（2026-10-11 实证的谎报）：这里原来是**手写两行清单**（host.js + modules/selfsnap.mjs）。
+  //   后果：我改了 valence / rhythm / patrol / tools / promise 之后，快照仍宣称
+  //   「磁盘未变，跑的就是最新一份」——**安全网在最需要它的那一刻撒了谎**
+  //   （它是"我跑的是不是旧代码"的唯一提示者，P171/P332 立的规矩全靠它）。
+  //   "手写清单"这个形态今天出现三次（测试清单 11 vs 14 个文件；64 vs 87 项）。
+  //   ⇒ 改为**自动发现**：host.js + modules/ 下所有非探针 .mjs。
+  const ENGINE_FILES = (function () {
+    const dir = new URL('./', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+    const out = [dir + 'host.js'];
+    try {
+      const entries = fs.readdirSync(dir + 'modules');
+      for (let i = 0; i < entries.length; i++) {
+        const f = entries[i];
+        if (f.slice(-4) === '.mjs' && f.charAt(0) !== '_') out.push(dir + 'modules/' + f);
+      }
+    } catch (e) { /* 目录读不到 ⇒ 至少保留 host.js：宁可漏报，不可谎报"没变" */ }
+    return out;
+  })();
   state.runStamp = makeRunStamp({ engineFiles: ENGINE_FILES });
   if (state.runStamp.stale) {
     console.log('[mpm][runstamp] ⚠ ' + state.runStamp.reasons.join('；'));

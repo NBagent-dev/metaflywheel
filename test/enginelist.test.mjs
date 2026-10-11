@@ -1,0 +1,90 @@
+// P507 判据：**陈旧探测必须盯住整个引擎，不许手写清单。**
+// 运行：node --test test/enginelist.test.mjs
+//
+// 实证（2026-10-11 自主发动那一轮）：快照首行说「磁盘未变，跑的就是最新一份」，
+//   而我在启动之后改了 5 个引擎文件（valence/rhythm/patrol/tools/promise）——
+//   因为 ENGINE_FILES 是**手写两行清单**（host.js + modules/selfsnap.mjs），
+//   其它 18 个模块的 mtime 根本不在监视范围内。
+//   ⇒ **它是"我跑的是不是旧代码"的唯一提示者，却在最需要它的那一刻撒了谎。**
+//
+// 三条判据：
+//   ① 静态：host.js 里必须出现自动发现（readdirSync），不许退回手写清单；
+//   ② 行为：按 host.js 的规则算出的清单必须覆盖**全部**非探针模块；
+//   ③ ★反例（这条最要紧）：改动一个**曾经不在清单里**的模块的 mtime
+//      ⇒ 陈旧判定必须为 true（P507 的场景必须红）。
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { makeRunStamp, evaluateRunStamp } from '../engine/modules/runstamp.mjs';
+
+const ENGINE = path.resolve(new URL('../engine', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+const HOST = path.join(ENGINE, 'host.js');
+const SRC = fs.readFileSync(HOST, 'utf8');
+
+/** 复刻 host.js 的发现规则（host.js + modules/*.mjs，排除 _ 开头的探针）。 */
+function discovered() {
+  const out = [HOST];
+  for (const f of fs.readdirSync(path.join(ENGINE, 'modules'))) {
+    if (f.endsWith('.mjs') && !f.startsWith('_')) out.push(path.join(ENGINE, 'modules', f));
+  }
+  return out;
+}
+
+test('①静态：host.js 必须自动发现引擎文件（readdirSync），不许退回手写清单', () => {
+  assert.ok(SRC.indexOf('readdirSync') >= 0,
+    'host.js 里找不到自动发现 ⇒ 又变回手写清单了（P507 会复发）');
+  assert.ok(/const ENGINE_FILES = \(function/.test(SRC) || /ENGINE_FILES[\s\S]{0,200}readdirSync/.test(SRC),
+    'ENGINE_FILES 必须由发现逻辑构造');
+});
+
+test('②行为：清单必须覆盖全部非探针模块（不许只盯一两个）', () => {
+  const list = discovered();
+  const mods = list.filter((p) => path.dirname(p) === path.join(ENGINE, 'modules'));
+  // ★不许写魔法阈值（第一版我写了 ≥15，实际 14 ⇒ 假警）：判据应当**从事实推导**——
+  //   清单长度必须恰好等于「host.js + 全部非探针模块」。
+  assert.equal(list.length, mods.length + 1, '清单必须含 host.js 本身且不漏不多（模块 ' + mods.length + ' 个）');
+  assert.ok(mods.length >= 5, '引擎模块数至少应有几个（实得 ' + mods.length + '）——判据锚点可能失效');
+  for (const must of ['valence.mjs', 'rhythm.mjs', 'patrol.mjs', 'tools.mjs', 'promise.mjs', 'selfsnap.mjs']) {
+    assert.ok(list.some((p) => p.endsWith(must)), must + ' 必须在监视范围内（P507 漏的正是这一族）');
+  }
+});
+
+test('③★反例：改动一个曾不在清单里的模块 ⇒ 陈旧判定必须为 true', () => {
+  // ★用**受控夹具**（临时文件 + 指定 mtime），不拿真实引擎文件当夹具——
+  //   第一版用真 valence.mjs 的 mtime，结果依赖"这些文件恰好什么时候被改过"，
+  //   测的是运气而不是判据（P332 的教训：判据要有可注入的输入）。
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'p507-'));
+  const watched = path.join(dir, 'watched.mjs');   // 旧清单里"被盯"的那个
+  const moduleF = path.join(dir, 'some-module.mjs'); // 旧清单漏掉的模块
+  const now = Date.now();
+  const tOld = now - 10 * 60000, tNew = now - 60000, bootAt = now - 5 * 60000;
+  fs.writeFileSync(watched, '// x'); fs.writeFileSync(moduleF, '// y');
+  fs.utimesSync(watched, new Date(tOld), new Date(tOld));
+  fs.utimesSync(moduleF, new Date(tNew), new Date(tNew));
+
+  // 旧清单（只盯 watched）⇒ **谎报"没变"**：这正是 P507 那一刻
+  // ★注意 API：`makeRunStamp()` **不设 `.stale`**（它只给 boot 时刻的对照字段，
+  //   见 runstamp.mjs:183 的注释）——**权威结论在 `evaluateRunStamp(rs)`**。
+  //   我第一版断言了 `rs.stale`（不存在的字段）⇒ 恒 falsy ⇒ 判据假红。
+  const oldEv = evaluateRunStamp(makeRunStamp({ now: now, bootAt: bootAt, engineFiles: [watched] }), now);
+  assert.equal(oldEv.stale, false, '旧清单确实会谎报（这条是场景复现，不是要求）');
+
+  // 新清单（自动发现，含那个模块）⇒ 必须报陈旧
+  const newEv = evaluateRunStamp(makeRunStamp({ now: now, bootAt: bootAt, engineFiles: [watched, moduleF] }), now);
+  assert.equal(newEv.stale, true, '自动发现后必须抓到"模块比启动新"：' + JSON.stringify(newEv).slice(0, 200));
+  assert.match((newEv.reasons || []).join('；'), /引擎源码/, '理由里要指出是引擎源码过期');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('③反例的另一面：启动晚于所有 mtime ⇒ 不陈旧（别恒报陈旧）', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'p507b-'));
+  const f = path.join(dir, 'a.mjs');
+  const now = Date.now(), t = now - 10 * 60000;
+  fs.writeFileSync(f, '// z');
+  fs.utimesSync(f, new Date(t), new Date(t));
+  const ev = evaluateRunStamp(makeRunStamp({ now: now, bootAt: now - 60000, engineFiles: [f] }), now);
+  assert.equal(ev.stale, false, '启动晚于全部 mtime 却报陈旧 ⇒ 假警（P332 的老毛病）');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
