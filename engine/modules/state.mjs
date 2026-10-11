@@ -145,6 +145,27 @@ async function restoreImpl(e) {
     //   原来只写不读，而它在 host.js 里初始化成 `[]` ⇒ **每次重启都用空数组覆盖磁盘上的叙事**
     //   （静默数据丢失，且因为没有渲染进快照，我一直没察觉）。
     e.state.narrations = Array.isArray(best.data.narrations) ? best.data.narrations : [];
+    // ★P511 落地：**用户在场证据必须跨重启存活**（"体验连续"缺口的头两个受害者）
+    //   原来 perception / lastActive 全在宿主态、重启即归零，于是：
+    //     ①`user:reply` 靠 perception.lastInboxAt 求值 ⇒ 重启**抹掉"用户回过话"这个事实**
+    //       ⇒ 依赖它的承诺退回 unknown（今天已因同类原因踩过一次）
+    //     ②自主发动的"温热"判定靠 lastActive ⇒ 重启后温热失真
+    //   ⇒ 恢复它们（写入侧在 persistImpl：从当前 perception 快照，且**没观测到就省略**）。
+    {
+      const pres = (best.data && best.data.presence) || null;
+      e.state.presence = pres;
+      if (pres) {
+        if (e.perception) {
+          if (typeof pres.lastInboxAt === 'number') e.perception.lastInboxAt = pres.lastInboxAt;
+          if (typeof pres.inboxCount === 'number') e.perception.inboxCount = pres.inboxCount;
+          if (typeof pres.sessionStarts === 'number') e.perception.sessionStarts = pres.sessionStarts;
+        }
+        if (e.lastActive) {
+          if (typeof pres.lastActiveAt === 'number' && pres.lastActiveAt > 0) e.lastActive.at = pres.lastActiveAt;
+          if (typeof pres.lastActiveAgent === 'string' && pres.lastActiveAgent) e.lastActive.agentId = pres.lastActiveAgent;
+        }
+      }
+    }
     // Schema migration on restore: backfill fields introduced after a
     // problem was first persisted. Never assume new fields exist on old state.
     for (const bk in e.state.problems) {
@@ -248,7 +269,24 @@ async function persistImpl(e) {
   e.bumpSnapRev();
   const plain = { seq: e.state.seq, problems: e.state.problems, sediments: e.state.sediments, lastRoot: e.root.current, patrol: e.state.patrol, measure: e.state.measure, constitution: { autonomy: e.state.constitution.autonomy, grantedAt: e.state.constitution.grantedAt, log: e.state.constitution.log, lastFireAt: e.state.constitution.lastFireAt }, valence: { events: (e.state.valence && Array.isArray(e.state.valence.events)) ? e.state.valence.events.slice(-200) : [] },     // ★没恢复过的字段，落盘时**省略**而不是写成 null：否则"恢复路径漏了一个字段"会升级成
     //   "把磁盘上的值擦掉"（2026-10-11 rhythm 就是这么丢的）。JSON.stringify 会丢掉 undefined 键。
-    rhythm: e.state.rhythm === undefined ? undefined : (e.state.rhythm || null), narrations: e.state.narrations };
+    rhythm: e.state.rhythm === undefined ? undefined : (e.state.rhythm || null), narrations: e.state.narrations,
+    // ★P511：用户在场证据——**没观测到就省略（undefined），不写 0/null**：
+    //   写 0 会伪造"用户从未说过话"，写 null 会擦掉磁盘上已有的值（rhythm 那次就是这么丢的）。
+    presence: (function () {
+      let p = null;
+      if (e.perception && typeof e.perception.lastInboxAt === 'number' && e.perception.lastInboxAt > 0) {
+        p = {
+          lastInboxAt: e.perception.lastInboxAt,
+          inboxCount: e.perception.inboxCount || 0,
+          sessionStarts: e.perception.sessionStarts || 0,
+          lastActiveAt: (e.lastActive && typeof e.lastActive.at === 'number') ? e.lastActive.at : 0,
+          lastActiveAgent: (e.lastActive && e.lastActive.agentId) ? String(e.lastActive.agentId) : ''
+        };
+      }
+      // ★自愈：本轮没观测到、但磁盘上有过 ⇒ **不许擦掉**（沿用 rhythm 的教训）
+      if (!p && e.state.presence) p = e.state.presence;
+      return p === null ? undefined : p;
+    })() };
   const json = JSON.stringify(plain, null, 2);
   try {
     const target = await e.fsSvc.resolve(stateFile(e.root.current));
