@@ -15,6 +15,7 @@ import { sedimentCacheGet, retrievalHits } from "./modules/retrieval.mjs";
 import { renderSelfSnapshot } from "./modules/selfsnap.mjs";
 import { throttleMsOf } from "./modules/rhythm.mjs";
 import { normalizeRules, decide, hintFor, hintLine } from "./modules/preaction.mjs";
+import { consultPrincipal } from "./modules/principal.mjs";   // ★P517②：把"源"接到动作上
 import { fmtProblem as fmtProblemCore, buildSnapshot, directiveText as directiveTextCore } from "./modules/core.mjs";
 import { VALENCE_TAU_MS, valenceRecord as valenceRecordCore, valenceSummaryLine as valenceSummaryLineCore } from "./modules/valence.mjs";
 import { makeBoundaryGuard } from "./modules/guard.mjs";
@@ -331,6 +332,18 @@ export function apply(ctx) {
       if (d.kind === 'deny') { state.preAction.deny += 1; return { kind: 'deny', reason: d.reason }; }
       if (d.kind === 'ask') { state.preAction.ask += 1; return { kind: 'ask', reason: d.reason }; }
       if (d.hint) state.preAction.hint += 1;
+      // ★P517②：**把"源"接到动作上** —— 动手前检索"他在类似事情上说过什么"。
+      //   判决只有 ask（请求复核）与 hint（提示），**永不 deny**：
+      //   纪律是"不许默默违反，也不许默默遵守"，而硬拒会把它变成僵化门（P518 风险②）。
+      //   排除元工具：录入/查看 principal 自身的调用不该被自己的条目拦（否则自我缠绕）。
+      try {
+        const tn = String((exec && exec.name) || '');
+        if (tn !== 'mpm_principal' && tn !== 'mpm_flywheel_state') {
+          const pc = consultPrincipal(state.principal, tn + ' ' + JSON.stringify((exec && exec.arguments) || {}));
+          if (pc.verdict === 'ask') { state.preAction.ask += 1; return { kind: 'ask', reason: pc.why }; }
+          if (pc.verdict === 'hint') { state.preAction.hint += 1; }
+        }
+      } catch (e3) { state.preAction.failOpen += 1; }   // fail-open：这一层坏了也不许拖垮宿主
       return await next();
     } catch (e) {
       state.preAction.failOpen += 1;

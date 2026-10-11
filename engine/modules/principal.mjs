@@ -90,6 +90,45 @@ export function mergePrincipalLists(a, b) {
   return out;
 }
 
+/**
+ * ★P517②：**把"源"接到动作上** —— 动手前检索"他在类似事情上说过什么"。
+ *
+ * 判决只有两种，**永不 deny**：
+ *   · 命中 veto 类   ⇒ `ask`（**请求复核**）—— 因为纪律是"不许默默违反，也不许默默遵守"，
+ *                      而硬拒会把装置变成僵化门（P518 风险②：单一来源 = 单点故障 + 过拟合）
+ *   · 命中其它类     ⇒ `hint`（提示）
+ *   · 没命中 / 没条目 ⇒ `null`（**绝不拦** —— 负控写进判据）
+ *
+ * 命中口径（**故意从宽、只做提示**）：subject 里出现该条的 `key`，或 key 的任一 2-gram。
+ * 宁多提示、不硬拦；漏报的代价由"快照那一行始终可见"兜底。
+ */
+export function consultPrincipal(list, subject) {
+  const s = String(subject == null ? '' : subject);
+  if (!s) return { hits: [], verdict: null, why: '' };
+  const live = (Array.isArray(list) ? list : []).filter(function (e) { return e && !e.supersededBy; });
+  const hits = [];
+  for (const e of live) {
+    const k = String(e.key || '');
+    if (!k) continue;
+    const grams = [];
+    for (let i = 0; i + 1 < k.length; i++) grams.push(k.slice(i, i + 2));
+    const hitKey = s.indexOf(k) >= 0;
+    const hitGram = grams.length > 0 && grams.some(function (g) { return s.indexOf(g) >= 0; });
+    if (hitKey || hitGram) hits.push(e);
+  }
+  if (!hits.length) return { hits: [], verdict: null, why: '' };
+  const veto = hits.filter(function (e) { return e.mode === 'veto'; })[0];
+  const head = veto || hits[0];
+  const mode = head.mode && PRINCIPAL_MODES[head.mode] ? PRINCIPAL_MODES[head.mode].label : '未分类';
+  return {
+    hits: hits,
+    verdict: veto ? 'ask' : 'hint',
+    why: '委托人的思考方式(P517·命中 ' + hits.length + ' 条)：「' + String(head.text).slice(0, 60) + '」(' + mode + '·' + head.key + ')'
+      + (veto ? '——**请先复核**：他说过这条；我若认为它已过时，必须显式请求复核，不许默默违反也不许默默遵守。'
+              : '——动手前请把这条考虑进去。')
+  };
+}
+
 /** 快照里那一行：**只显示真实录入的条目**；一条都没有 ⇒ 返回空串（负控：不许凭空说"你说过"）。 */
 export function principalLine(state, limit) {
   const list = (state && Array.isArray(state.principal)) ? state.principal : [];
