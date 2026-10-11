@@ -31,7 +31,7 @@
     "@deepseek-ai/dsh-tools": "*"
   },
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test"
   },
   "repository": {
     "type": "git",
