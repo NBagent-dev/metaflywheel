@@ -106,6 +106,7 @@ async function readStateDataImpl(e, r) {
  */
 import { mergePrincipalLists } from "./principal.mjs";   // ★P517（**第 4 次"用了没引入"**：靠冷启动集成判据抓到，不是静态判据）
 import { mergeUnknowns } from "./unknowns.mjs";          // ★P517③：未核清单（记忆的另一半：我不知道的东西）
+import { mergeHits } from "./hits.mjs";                  // ★P519：回流（命中的处置必须留痕）
 
 export function mergePresenceInto(perception, lastActive, pres) {
   if (!pres) return false;                       // 负控：没有磁盘证据 ⇒ 什么都不做（不许凭空造）
@@ -194,6 +195,8 @@ async function restoreImpl(e) {
     e.state.principal = mergePrincipalLists(e.state.principal, (best.data && best.data.principal) || []);
     // ★P517③：**未核清单**——与 principal 配成一对（那记"我知道的"，这记"我不知道的"）。归并而非覆盖。
     e.state.unknowns = mergeUnknowns(e.state.unknowns, (best.data && best.data.unknowns) || []);
+    // ★P519：**回流**——命中的处置记录。归并而非覆盖（同一纪律）。
+    e.state.hits = mergeHits(e.state.hits, (best.data && best.data.hits) || []);
     // Schema migration on restore: backfill fields introduced after a
     // problem was first persisted. Never assume new fields exist on old state.
     for (const bk in e.state.problems) {
@@ -303,6 +306,8 @@ async function persistImpl(e) {
     principal: Array.isArray(e.state.principal) ? e.state.principal.slice(-200) : [],
     // ★P517③：未核清单（我知道自己没验的东西）。空数组也落盘（schema 口径同 principal）。
     unknowns: Array.isArray(e.state.unknowns) ? e.state.unknowns.slice(-200) : [],
+    // ★P519：回流——命中与处置（未处置必须可见）。空数组也落盘（schema 口径同前）。
+    hits: Array.isArray(e.state.hits) ? e.state.hits.slice(-300) : [],
     // ★P511：用户在场证据——**没观测到就省略（undefined），不写 0/null**：
     //   写 0 会伪造"用户从未说过话"，写 null 会擦掉磁盘上已有的值（rhythm 那次就是这么丢的）。
     presence: (function () {

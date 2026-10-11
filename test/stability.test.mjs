@@ -121,7 +121,8 @@ test('稳定性·非法输入：所有工具在缺参数/错参数下必须返�
     'mpm_principal'];
   // ★P517③：未核清单——**空参=list（只读查询）**，与 mpm_rhythm 空参=show 同类；
   //   写入路径（add/resolve）缺参时由工具自身返回 ok:false，已由 unknowns.test.mjs 覆盖。
-  const QUERY_TOOLS = ['mpm_flywheel_state', 'mpm_rhythm', 'mpm_unknown'];
+  // ★P519：回流——空参=list（只读查询）；dispose 缺 myAction 时由工具自身返回 ok:false，已由 hits.test.mjs 覆盖。
+  const QUERY_TOOLS = ['mpm_flywheel_state', 'mpm_rhythm', 'mpm_unknown', 'mpm_hit'];
   const names = host.registered.map((t) => t.name);
   for (const n of WRITE_TOOLS.concat(QUERY_TOOLS)) assert.ok(names.includes(n), '工具缺失：' + n);
   assert.equal(names.length, WRITE_TOOLS.length + QUERY_TOOLS.length,

@@ -205,10 +205,13 @@ const REQUIRED_STRINGS = {
   //   这样未来任何一个实例都能审它、也能发现"这条是不是被伪造的"。
   mpm_principal: ['text', 'key', 'note'],
   // ★P517③：未核清单。action 必填（add|resolve|list）；**add 还要 text/key/until 三件**，由工具内部校验。
-  mpm_unknown: ['action']
+  mpm_unknown: ['action'],
+  // ★P519：回流。action 必填（list|dispose）；dispose 还要 myAction（**空处置不算处置**）。
+  mpm_hit: ['action']
 };
 // ★P517③：未核清单——"我知道自己没验的东西，也要跨代活着"
 import { addUnknown, resolveUnknown, openUnknowns, unknownLine } from "./unknowns.mjs";
+import { disposeHit, openHits, hitsLine } from "./hits.mjs";   // ★P519 回流
 // ★P517：委托人的思考方式（原话 / 约束对象 / 场合）——与"我的"节律并列的一等公民。
 import { recordPrincipal, principalLine } from "./principal.mjs";
 const REQUIRED_NUMBERS = {
@@ -827,6 +830,36 @@ export function makeTools(deps) {
             + '\n' + unknownLine(d.state) + (pr && pr.ok ? '' : '\n⚠ 落盘未成功：' + (pr && pr.reason)) };
         }
         return { ok: true, report: unknownLine(d.state) || '未核清单为空（**没有条目就不显示、也不凭空造**）。' };
+      }
+    ),
+    // ★P519 回流：**命的处置必须留痕**——否则"我没违反"永远无法被检验。
+    //   与 P482⑨「承诺的最后一米」同构：写下→叫醒→履行→**清账**，缺的是清账。
+    mkTool(
+      'mpm_hit',
+      'MPM回流(P519)：查看/清账**命中记录**——"他在动手前提醒过我什么，我当时的处置是什么"。纪律：①命中由引擎在 pre-execute 自动记录（不是我自报）；②清账（action=dispose）**必须给 myAction**——空处置不算处置；③**未处置必须可见**：命中却没说清怎么处置，等于没被约束过。',
+      {
+        properties: {
+          action: { type: 'string', description: 'list（默认，列出命中与处置）| dispose（清账，需 myAction）' },
+          key: { type: 'string', description: 'dispose：按约束对象清账（从最新往前一条）' },
+          id: { type: 'string', description: 'dispose：按命中 id 精确清账（优先于 key）' },
+          myAction: { type: 'string', description: 'dispose **必填**：我当时如何处置（必须可被下一次观测校验）' }
+        }
+      },
+      [],
+      async function (args) {
+        const d = CURRENT_DEPS;
+        const act = String(args.action || 'list').toLowerCase();
+        if (act === 'dispose') {
+          const r = disposeHit(d.state.hits, String(args.id || args.key || ''), args.myAction, Date.now());
+          if (!r.disposed.length) return { ok: false, report: '未清账：要么没给 myAction（**空处置不算处置**），要么 id/key 没匹配到未处置的命中记录。' };
+          d.state.hits = r.list;
+          const pr = await d.persist();
+          return { ok: true, report: '已清账 1 条（处置已留痕）：' + String(r.disposed[0].myAction).slice(0, 80)
+            + '\n' + hitsLine(d.state) + (pr && pr.ok ? '' : '\n⚠ 落盘未成功：' + (pr && pr.reason)) };
+        }
+        const open = openHits(d.state.hits);
+        return { ok: true, report: (hitsLine(d.state) || '（还没有命中记录——**没有就不显示，也不凭空造**）')
+          + (open.length ? '\n未处置 ' + open.length + ' 条待清账。' : '') };
       }
     ),
     mkTool(

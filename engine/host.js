@@ -17,6 +17,7 @@ import { throttleMsOf } from "./modules/rhythm.mjs";
 import { normalizeRules, decide, hintFor, hintLine } from "./modules/preaction.mjs";
 import { consultPrincipal } from "./modules/principal.mjs";   // ★P517②：把"源"接到动作上
 import { consultUnknowns } from "./modules/unknowns.mjs";     // ★P517③：未核清单（只提示，永不拦）
+import { recordHit } from "./modules/hits.mjs";                // ★P519：回流（命中即留痕）
 import { fmtProblem as fmtProblemCore, buildSnapshot, directiveText as directiveTextCore } from "./modules/core.mjs";
 import { VALENCE_TAU_MS, valenceRecord as valenceRecordCore, valenceSummaryLine as valenceSummaryLineCore } from "./modules/valence.mjs";
 import { makeBoundaryGuard } from "./modules/guard.mjs";
@@ -339,14 +340,24 @@ export function apply(ctx) {
       //   排除元工具：录入/查看 principal 自身的调用不该被自己的条目拦（否则自我缠绕）。
       try {
         const tn = String((exec && exec.name) || '');
-        if (tn !== 'mpm_principal' && tn !== 'mpm_flywheel_state') {
-          const pc = consultPrincipal(state.principal, tn + ' ' + JSON.stringify((exec && exec.arguments) || {}));
+        if (tn !== 'mpm_principal' && tn !== 'mpm_flywheel_state' && tn !== 'mpm_hit' && tn !== 'mpm_unknown') {
+          const subj = tn + ' ' + JSON.stringify((exec && exec.arguments) || {});
+          const pc = consultPrincipal(state.principal, subj);
+          // ★P519 回流：**命中即留痕**（先记，再决定拦不拦）。记的是事实：哪条命中、什么判决、什么动作触发；
+          //   "我如何处置"由我事后用 mpm_hit 清账——**未处置会被显示出来**。
+          if (pc.hits.length) {
+            for (const h of pc.hits) {
+              const r = recordHit(state.hits, { at: Date.now(), key: h.key, entryId: h.id, text: h.text, tool: tn, verdict: pc.verdict });
+              if (r.entry) state.hits = r.list;
+            }
+          }
           if (pc.verdict === 'ask') { state.preAction.ask += 1; return { kind: 'ask', reason: pc.why }; }
+          // ★修正（2026-10-11）：hint **只数一次**——此前这一段有两行重复计数 ⇒ 计数虚高（实测"提示27"是双计出来的）。
+          //   这正好是 P519 的立题证据：**计数不可信，因为它只是数字、不是记录**。
           if (pc.verdict === 'hint') state.preAction.hint += 1;
           // ★P517③：未核清单——**只提示，永不 ask/deny**（不知道的东西不许挡路，只许提醒）
-          const uc = consultUnknowns(state.unknowns, tn + ' ' + JSON.stringify((exec && exec.arguments) || {}));
+          const uc = consultUnknowns(state.unknowns, subj);
           if (uc.verdict === 'hint') state.preAction.hint += 1;
-          if (pc.verdict === 'hint') { state.preAction.hint += 1; }
         }
       } catch (e3) { state.preAction.failOpen += 1; }   // fail-open：这一层坏了也不许拖垮宿主
       return await next();

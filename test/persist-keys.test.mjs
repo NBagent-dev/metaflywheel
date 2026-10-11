@@ -36,7 +36,10 @@ const EXPECTED_PERSISTED = ['seq', 'problems', 'sediments', 'lastRoot', 'patrol'
   'principal',
   // ★P517③：**未核清单**（我知道自己没验的东西）。
   //   看守者：test/unknowns.test.mjs（三件必填 / 核销必须带证据 / 只提示永不拦 / 归并 / 有界）。
-  'unknowns'];
+  'unknowns',
+  // ★P519：**回流**（命中与处置）。看守者：test/hits.test.mjs（无 key/tool 不记 / 空处置不算处置 /
+  //   **未处置必须可见** / 同一条只清一次 / 归并 / 有界 / 结构上不可能出现 deny）。
+  'hits'];
 /** 对象型父字段：恢复时必须"先继承再覆盖"（源对象名约定为 <x>Src）。 */
 const OBJECT_PARENTS = ['patrol', 'measure', 'constitution', 'valence'];
 /** 明确豁免 + 理由（不许默默放过任何一个）。 */

@@ -52,7 +52,11 @@ test('⑤★纪律判据：源码里 consult 的结果**不得**出现 deny', ()
   const HOST = fs.readFileSync(new URL('../engine/host.js', import.meta.url), 'utf8');
   const i = HOST.indexOf('consultPrincipal(state.principal');
   assert.ok(i > 0, 'host.js 没有调用 consultPrincipal ⇒ 源仍然只写不读（消费✗）');
-  const block = HOST.slice(i, i + 700);
+  // ★锚点从"魔法数字 700"改成**按结构定位**（P487-M405：负控的锚点会随实现漂移）。
+  //   事故：`hit` 与回流记录加进这一段后，代码长度超过 700 字符 ⇒ 窗口里看不到 `catch` ⇒ **假警**。
+  //   现在从调用点一直切到包含它的 `} catch (` 为止 —— 实现变长不会让它失明。
+  const end = HOST.indexOf('} catch (', i);
+  const block = HOST.slice(i, end > i ? end + 40 : HOST.length);
   assert.ok(!/kind:\s*'deny'/.test(block), 'principal 的判决里出现了 deny：它只能 ask/hint —— 硬拒会变成僵化门');
   assert.match(block, /kind:\s*'ask'/, 'veto 必须落到 ask（请求复核）');
 });
@@ -61,6 +65,7 @@ test('⑥接线：host.js 必须 import 它，且失败时 fail-open（不许拖
   const HOST = fs.readFileSync(new URL('../engine/host.js', import.meta.url), 'utf8');
   assert.match(HOST, /import\s*\{[^}]*consultPrincipal[^}]*\}\s*from\s*['"]\.\/modules\/principal\.mjs['"]/);
   const i = HOST.indexOf('consultPrincipal(state.principal');
-  const block = HOST.slice(i, i + 700);
+  const end = HOST.indexOf('} catch (', i);            // ★按结构定位，不用魔法数字（见上）
+  const block = HOST.slice(i, end > i ? end + 40 : HOST.length);
   assert.match(block, /catch\s*\(/, '这一层必须自带 try/catch（全局钩子坏掉会拖垮整个宿主）');
 });
