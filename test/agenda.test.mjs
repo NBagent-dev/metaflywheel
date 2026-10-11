@@ -84,3 +84,10 @@ test('⑧实现里不得出现把 L2 说成 L3 的措辞（源码级扫描）', 
   assert.ok(!/我想要/.test(bare), '实现里不得出现"我想要"这种**肯定式**自述（否定式"不是想要"允许）');
   assert.ok(!/L3['"］]?\s*[:=]\s*['"]?L3/.test(code), '不许产出 L3');
 });
+
+test('⑨★接线：selfsnap 必须渲染内生议程（**能算出 ≠ 会被看见**）', () => {
+  const SRC = fs.readFileSync(new URL('../engine/modules/selfsnap.mjs', import.meta.url), 'utf8');
+  assert.match(SRC, /import\s*\{[^}]*agendaLine[^}]*\}\s*from\s*['"]\.\/agenda\.mjs['"]/, 'selfsnap 必须引入 agendaLine');
+  assert.ok(/agendaLine\(state\)/.test(SRC), 'selfsnap 必须真的调用 agendaLine(state)');
+  assert.ok(/if\s*\(\s*al\s*\)\s*lines\.push\(al\)/.test(SRC), '空议程 ⇒ 不 push（负控）');
+});

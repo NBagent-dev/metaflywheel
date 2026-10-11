@@ -10,6 +10,7 @@ import { staleMsOf, rhythmLine, rhythmOf } from "./rhythm.mjs";
 import { principalLine } from "./principal.mjs";   // ★P517：委托人的思考方式
 import { unknownLine } from "./unknowns.mjs";      // ★P517③：未核清单（我不知道的东西）
 import { hitsLine } from "./hits.mjs";             // ★P519：回流（命中与处置）
+import { agendaLine } from "./agenda.mjs";         // ★P521：内生议程（账本替我说该做什么）
 
 // ── 保险丝（P484，2026-10-10 事故的直接修复）──────────────────────────────
 // 事故：本模块内部一个 ReferenceError（fresh 未定义）让 renderSelfSnapshot 抛异常
@@ -264,6 +265,9 @@ function renderSnapshotInner(d) {
   { const ul = unknownLine(state); if (ul) lines.push(ul); }
   // ★P519：回流（**没有命中记录 ⇒ 不显示**；有则【未处置数必须可见】）。
   { const hl = hitsLine(state); if (hl) lines.push(hl); }
+  // ★P521：内生议程（**账本替我说该做什么**；没有议题 ⇒ 不显示——负控）。
+  //   ★为什么必须进快照：**"能算出"和"会被看见"是两件事**——今天已教训过我三次（写入✓显示✓消费✗家族）。
+  { const al = agendaLine(state); if (al) lines.push(al); }
   lines.push(rhythmLine(state));   // ★P482④：节律必须可见，且标明"自我设定"还是"出厂默认"
   lines.push('- 指令：' + d.directiveText());
   lines.push('- 代谢：共' + ids.length + '题 · 沉积' + state.sediments.length + ' · 总账原则生效（非平凡工作必须可归账：推进在轮题或 mpm_micro 建账）。');
