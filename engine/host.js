@@ -13,6 +13,7 @@ import { makeTools } from "./modules/tools.mjs";
 import { PHI_MARKS, phiOf, bigrams, revisionOf, relAgo } from "./modules/util.mjs";
 import { sedimentCacheGet, retrievalHits } from "./modules/retrieval.mjs";
 import { renderSelfSnapshot } from "./modules/selfsnap.mjs";
+import { throttleMsOf } from "./modules/rhythm.mjs";
 import { fmtProblem as fmtProblemCore, buildSnapshot, directiveText as directiveTextCore } from "./modules/core.mjs";
 import { VALENCE_TAU_MS, valenceRecord as valenceRecordCore, valenceSummaryLine as valenceSummaryLineCore } from "./modules/valence.mjs";
 import { makeBoundaryGuard } from "./modules/guard.mjs";
@@ -244,7 +245,8 @@ export function apply(ctx) {
       //   从 `flywheel.json` 里看不出"这是被拦下的意图"还是"已发动的意图"——
       //   两者在 pending 里的形状一样。加 `throttled` 标记后，账本自己说得清。
       if (!warm) { c.pending.unshift({ at: nowMs, signal: '（身体冷却：2h 内无活动会话，意图挂账不发动）', throttled: 'cold' }); return; }
-      if (nowMs - c.lastFireAt < FIRE_THROTTLE_MS) { c.pending.unshift({ at: nowMs, signal: '（节流中：距上次发动不足45min，意图挂账）', throttled: 'throttle' }); return; }
+      // ★P482④ 调度权：节流值改为**读个体自己的节律**（出厂默认仍是 45min，见 rhythm.mjs）。
+      if (nowMs - c.lastFireAt < throttleMsOf(state)) { c.pending.unshift({ at: nowMs, signal: '（节流中：距上次发动不足 ' + Math.round(throttleMsOf(state) / 60000) + 'min，意图挂账）', throttled: 'throttle' }); return; }
       const agentsSvc = ctx.get('agents');
       const ag = agentsSvc && typeof agentsSvc.get === 'function' ? agentsSvc.get(lastActive.agentId) : undefined;
       if (!(ag && typeof ag.followup === 'function' && (ag.status === 'running' || ag.status === 'idle'))) return;

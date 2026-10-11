@@ -9,6 +9,7 @@ import { defineTool } from "@deepseek-ai/dsh-tools";
 import { phiOf, revisionOf } from "./util.mjs";
 import { sedimentCacheGet, retrieveTop } from "./retrieval.mjs";
 import { persistNote } from "./state.mjs";
+import { rhythmOf, normalizeRhythm, rhythmLine } from "./rhythm.mjs";
 
 // ══ P482 账本可达性三件套（A 强制 / B 便宜 / C 可见）══════════════════════
 // 起因（2026-10-10 实测）：401 条沉积里只有 13 条参与过任何关联、引用边仅 10 条，
@@ -198,7 +199,8 @@ const REQUIRED_STRINGS = {
   mpm_setroot: ['path'],
   mpm_grant: ['action'],
   mpm_narrate: ['text'],
-  mpm_flywheel_state: []
+  mpm_flywheel_state: [],
+  mpm_rhythm: ['action']
 };
 const REQUIRED_NUMBERS = {
   mpm_frame: ['delta'], mpm_converge: ['delta', 'epsilon'],
@@ -704,6 +706,49 @@ export function makeTools(deps) {
   const d = deps;
   CURRENT_DEPS = deps;   // P487①：绑定给 mkTool 的"落盘结论"包装器
   return [
+    // ★P482④ 调度权：个体可以**改写自己的节律**（陈旧阈值 / 发动节流 / 静默时段）。
+    //   约束写死在 rhythm.mjs 与 test/rhythm.test.mjs：有界（不许把自己写死）、越界不静默、
+    //   可见（快照标明"自我设定"还是"出厂默认"）、可回退（reset）。
+    mkTool(
+      'mpm_rhythm',
+      'MPM调度权（P482④）：查看或改写**自己的节律**——陈旧阈值、发动节流、静默时段。出厂默认=陈旧30min/节流45min/不静默；可 set 也可 reset 回出厂。',
+      {
+        properties: {
+          action: { type: 'string', description: 'show(默认) | set | reset' },
+          staleMinutes: { type: 'number', description: '多久算"陈旧"（5~1440 分钟）' },
+          fireThrottleMinutes: { type: 'number', description: '两次自主发动的最小间隔（5~720 分钟）' },
+          quietFrom: { type: 'number', description: '静默时段起（0~23）；与 quietTo 相同或省略表示不设' },
+          quietTo: { type: 'number', description: '静默时段止（0~23，支持跨午夜如 23→7）' },
+          note: { type: 'string', description: '为什么改（进历史与报告）' }
+        }
+      },
+      [],
+      async function (args) {
+        const d = CURRENT_DEPS;
+        const act = String(args.action || 'show').toLowerCase();
+        if (act === 'reset') {
+          d.state.rhythm = null;
+          const pr = await d.persist();
+          return { ok: true, report: '已回到**出厂节律**（我的自我设定已清除）。\n' + rhythmLine(d.state) + (pr && pr.ok ? '' : '\n⚠ 落盘未成功：' + (pr && pr.reason)) };
+        }
+        if (act === 'set') {
+          const next = normalizeRhythm({
+            staleMinutes: args.staleMinutes, fireThrottleMinutes: args.fireThrottleMinutes,
+            quietFrom: args.quietFrom, quietTo: args.quietTo
+          }, rhythmOf(d.state));
+          d.state.rhythm = next.rhythm;
+          const pr = await d.persist();
+          return {
+            ok: true,
+            report: '节律已改写（**由我自己写下，非出厂常数**）：\n' + rhythmLine(d.state)
+              + (next.rejected.length ? '\n⚠ 被拒 ' + next.rejected.length + ' 项（保持原值，未夹取冒充成功）：' + next.rejected.join('；') : '')
+              + (String(args.note || '') ? '\n理由：' + String(args.note).slice(0, 200) : '')
+              + (pr && pr.ok ? '' : '\n⚠ 落盘未成功：' + (pr && pr.reason))
+          };
+        }
+        return { ok: true, report: rhythmLine(d.state) + '\n（mpm_rhythm action=set 改写；action=reset 回出厂）' };
+      }
+    ),
     mkTool(
       'mpm_generate',
       'MPM飞轮G阶段：建题。当感知到意外、差距或现有模型解释不了的现象（信息熵阶跃）时，用它把问题感登记为正式问题。',

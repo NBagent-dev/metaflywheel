@@ -228,7 +228,7 @@ function lf(s) { return String(s == null ? '' : s).replace(/\r\n/g, '\n'); }
 async function persistImpl(e) {
   if (!e.fsSvc || !e.root.current) return { ok: false, mode: 'failed', reason: 'fsSvc 缺失或沉积根未定' };
   e.bumpSnapRev();
-  const plain = { seq: e.state.seq, problems: e.state.problems, sediments: e.state.sediments, lastRoot: e.root.current, patrol: e.state.patrol, measure: e.state.measure, constitution: { autonomy: e.state.constitution.autonomy, grantedAt: e.state.constitution.grantedAt, log: e.state.constitution.log, lastFireAt: e.state.constitution.lastFireAt }, valence: { events: (e.state.valence && Array.isArray(e.state.valence.events)) ? e.state.valence.events.slice(-200) : [] }, narrations: e.state.narrations };
+  const plain = { seq: e.state.seq, problems: e.state.problems, sediments: e.state.sediments, lastRoot: e.root.current, patrol: e.state.patrol, measure: e.state.measure, constitution: { autonomy: e.state.constitution.autonomy, grantedAt: e.state.constitution.grantedAt, log: e.state.constitution.log, lastFireAt: e.state.constitution.lastFireAt }, valence: { events: (e.state.valence && Array.isArray(e.state.valence.events)) ? e.state.valence.events.slice(-200) : [] }, rhythm: e.state.rhythm || null, narrations: e.state.narrations };
   const json = JSON.stringify(plain, null, 2);
   try {
     const target = await e.fsSvc.resolve(stateFile(e.root.current));

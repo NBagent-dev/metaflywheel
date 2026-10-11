@@ -116,7 +116,7 @@ test('稳定性·非法输入：所有工具在缺参数/错参数下必须返�
   //   mpm_flywheel_state 是只读查询，空参数正常返回统计。判据要把两类分开。
   const WRITE_TOOLS = ['mpm_generate', 'mpm_frame', 'mpm_solve', 'mpm_converge', 'mpm_deposit', 'mpm_evoke',
     'mpm_micro', 'mpm_setroot', 'mpm_grant', 'mpm_narrate'];
-  const QUERY_TOOLS = ['mpm_flywheel_state'];
+  const QUERY_TOOLS = ['mpm_flywheel_state', 'mpm_rhythm'];   // mpm_rhythm 空参数=show，是只读查询
   const names = host.registered.map((t) => t.name);
   for (const n of WRITE_TOOLS.concat(QUERY_TOOLS)) assert.ok(names.includes(n), '工具缺失：' + n);
   assert.equal(names.length, WRITE_TOOLS.length + QUERY_TOOLS.length, '工具数量与预期不符：实得 ' + names.join(','));

@@ -6,6 +6,7 @@
 import { bigrams, relAgo } from "./util.mjs";
 import { sedimentCacheGet, retrieveTop } from "./retrieval.mjs";
 import { shapeOfPromise } from "./promise.mjs";
+import { staleMsOf, rhythmLine } from "./rhythm.mjs";
 
 // ── 保险丝（P484，2026-10-10 事故的直接修复）──────────────────────────────
 // 事故：本模块内部一个 ReferenceError（fresh 未定义）让 renderSelfSnapshot 抛异常
@@ -191,7 +192,7 @@ function renderSnapshotInner(d) {
   for (let i = 0; i < ids.length; i++) {
     const p2 = state.problems[ids[i]];
     if (d.isParked(p2) || d.isOpen(p2)) continue; // P027/A1+P003/§5.4：搁置与开放题不进陈旧名单
-    if ((p2.stage === 'S' || p2.stage === 'F') && p2.updatedAt && Date.now() - p2.updatedAt > 30 * 60000) {
+    if ((p2.stage === 'S' || p2.stage === 'F') && p2.updatedAt && Date.now() - p2.updatedAt > staleMsOf(state)) {
       stale.push(p2.id + ' ' + Math.round((Date.now() - p2.updatedAt) / 60000) + '分钟无进展');
     }
   }
@@ -219,6 +220,7 @@ function renderSnapshotInner(d) {
   if (prom.length) lines.push('- 承诺(P482·可机械求值，源自自身历史)：' + prom.join('；') + '。');
   if (wish.length) lines.push('- 愿望(P482·不可机械求值 ⇒ 永不自动叫醒：要么改写成 after:/cites:/epsilon:/exists:/user:reply，要么承认它是愿望)：' + wish.join('；') + '。');
   if (due.length) lines.push('- ★ 待办意图(源自你自己的承诺，非出厂规则)：' + due.join('；') + '——直接推进该题并 mpm_solve 登记。');
+  lines.push(rhythmLine(state));   // ★P482④：节律必须可见，且标明"自我设定"还是"出厂默认"
   lines.push('- 指令：' + d.directiveText());
   lines.push('- 代谢：共' + ids.length + '题 · 沉积' + state.sediments.length + ' · 总账原则生效（非平凡工作必须可归账：推进在轮题或 mpm_micro 建账）。');
   if (d.outsideCalls >= d.BOUNDARY_THRESHOLD) {
