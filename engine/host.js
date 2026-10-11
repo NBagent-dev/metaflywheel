@@ -14,6 +14,7 @@ import { PHI_MARKS, phiOf, bigrams, revisionOf, relAgo } from "./modules/util.mj
 import { sedimentCacheGet, retrievalHits } from "./modules/retrieval.mjs";
 import { renderSelfSnapshot } from "./modules/selfsnap.mjs";
 import { throttleMsOf } from "./modules/rhythm.mjs";
+import { normalizeRules, decide, hintFor, hintLine } from "./modules/preaction.mjs";
 import { fmtProblem as fmtProblemCore, buildSnapshot, directiveText as directiveTextCore } from "./modules/core.mjs";
 import { VALENCE_TAU_MS, valenceRecord as valenceRecordCore, valenceSummaryLine as valenceSummaryLineCore } from "./modules/valence.mjs";
 import { makeBoundaryGuard } from "./modules/guard.mjs";
@@ -285,6 +286,58 @@ export function apply(ctx) {
   // P079：常规巡检主体 + 宪法复审已迁 engine/modules/patrol.mjs（makePatrol 工厂，返回 runPatrol 函数绑定）。
   // patrol 为宿主闭包依赖注入（state/isParked/isOpen/ensureLoaded/snapshot/persist/deliberate/fsSvc/root/PATROL_MS/FIRE_THROTTLE_MS）；
   // STAGE_NAMES 由模块自 util.mjs import；patrolling/lastReviewRound/CONSTS 为模块私有（CONSTS 经 p 取得 PATROL_MS/FIRE_THROTTLE_MS 单源）。
+  // ★P482⑧ 行动前检索（pre-action recall）：把"过去的我"送到**动手那一刻**。
+  //   契约（先读后写——P488 的教训）：
+  //     tools/pre-execute(exec, next) → allow | deny{reason} | cancel | ask{reason}
+  //        **allow 不带内容** ⇒ 这里只能"拦"（档2 ask / 档3 deny）；exec 的字段是 name/arguments
+  //     tools/post-execute(exec, result, next) → accept{content?}  ⇒ 档1 的注入在这里
+  //   规则表是**数据**：<沉积根>/.mpm/preaction.rules.json（我自己写的"动手前须知"），5s 缓存。
+  //   安全边界（全局钩子，坏掉会拖垮整个宿主）：全程 fail-open —— 钩子异常一律放行并计数；
+  //   规则表坏了当空表；文件缺失 = 天然停用；state.preAction.off 可一键停用。
+  let preRules = { at: 0, list: [] };
+  async function preRulesNow() {
+    if (Date.now() - preRules.at < 5000) return preRules.list;
+    preRules = { at: Date.now(), list: [] };
+    try {
+      if (root.current && fsSvc) {
+        const t = await fsSvc.resolve(root.current + '/.mpm/preaction.rules.json');
+        const txt = await fsSvc.readText(t);
+        preRules.list = normalizeRules(JSON.parse(txt).rules);
+      }
+    } catch (e) { /* 不存在/坏了 ⇒ 空表，不是拒绝 */ }
+    return preRules.list;
+  }
+  if (!state.preAction) state.preAction = { hint: 0, ask: 0, deny: 0, injectFail: 0, failOpen: 0, off: false };
+  const preOff = function () { return !!(state.preAction && state.preAction.off); };
+  ctx.on('tools/pre-execute', async function (exec, next) {
+    try {
+      if (preOff()) return await next();
+      const d = decide(await preRulesNow(), { tool: exec && exec.name, args: exec && exec.arguments });
+      if (d.kind === 'deny') { state.preAction.deny += 1; return { kind: 'deny', reason: d.reason }; }
+      if (d.kind === 'ask') { state.preAction.ask += 1; return { kind: 'ask', reason: d.reason }; }
+      if (d.hint) state.preAction.hint += 1;
+      return await next();
+    } catch (e) {
+      state.preAction.failOpen += 1;
+      try { return await next(); } catch (e2) { return { kind: 'allow' }; }
+    }
+  });
+  ctx.on('tools/post-execute', async function (exec, result, next) {
+    try {
+      if (preOff()) return await next();
+      const hint = hintFor(await preRulesNow(), { tool: exec && exec.name, args: exec && exec.arguments });
+      if (!hint) return await next();
+      const out = await next();
+      const base = (out && out.kind === 'accept') ? out : { kind: 'accept' };
+      const content = Array.isArray(base.content) ? base.content.slice()
+        : (Array.isArray(result && result.content) ? result.content.slice() : []);
+      content.push({ type: 'text', text: '\n' + hintLine(hint) });
+      return Object.assign({}, base, { kind: 'accept', content: content });
+    } catch (e) {
+      state.preAction.injectFail += 1;
+      try { return await next(); } catch (e2) { return { kind: 'accept' }; }
+    }
+  });
   const patrolFn = makePatrol({
     state: state, isParked: isParked, isOpen: isOpen,
     ensureLoaded: ensureLoaded, snapshot: snapshot, persist: persist, deliberate: deliberate,

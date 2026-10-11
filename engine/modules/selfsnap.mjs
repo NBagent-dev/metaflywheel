@@ -220,6 +220,14 @@ function renderSnapshotInner(d) {
   if (prom.length) lines.push('- 承诺(P482·可机械求值，源自自身历史)：' + prom.join('；') + '。');
   if (wish.length) lines.push('- 愿望(P482·不可机械求值 ⇒ 永不自动叫醒：要么改写成 after:/cites:/epsilon:/exists:/user:reply，要么承认它是愿望)：' + wish.join('；') + '。');
   if (due.length) lines.push('- ★ 待办意图(源自你自己的承诺，非出厂规则)：' + due.join('；') + '——直接推进该题并 mpm_solve 登记。');
+  // ★P482⑧：行动前检索的可见性——**看不到命中数，就不知道它到底有没有在工作**
+  if (state.preAction) {
+    const pa = state.preAction;
+    lines.push('- 行动前检索(P482⑧·来自我自己的历史)：' + (pa.off ? '已停用' : '启用')
+      + ' · 命中 提示' + (pa.hint || 0) + '/问' + (pa.ask || 0) + '/拦' + (pa.deny || 0)
+      + (pa.injectFail ? ' · ⚠注入失败' + pa.injectFail : '')
+      + (pa.failOpen ? ' · ⚠fail-open' + pa.failOpen : ''));
+  }
   lines.push(rhythmLine(state));   // ★P482④：节律必须可见，且标明"自我设定"还是"出厂默认"
   lines.push('- 指令：' + d.directiveText());
   lines.push('- 代谢：共' + ids.length + '题 · 沉积' + state.sediments.length + ' · 总账原则生效（非平凡工作必须可归账：推进在轮题或 mpm_micro 建账）。');
