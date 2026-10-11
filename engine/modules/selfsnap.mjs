@@ -6,7 +6,7 @@
 import { bigrams, relAgo } from "./util.mjs";
 import { sedimentCacheGet, retrieveTop } from "./retrieval.mjs";
 import { shapeOfPromise } from "./promise.mjs";
-import { staleMsOf, rhythmLine } from "./rhythm.mjs";
+import { staleMsOf, rhythmLine, rhythmOf } from "./rhythm.mjs";
 
 // ── 保险丝（P484，2026-10-10 事故的直接修复）──────────────────────────────
 // 事故：本模块内部一个 ReferenceError（fresh 未定义）让 renderSelfSnapshot 抛异常
@@ -233,6 +233,27 @@ function renderSnapshotInner(d) {
       + ' · 命中 提示' + (pa.hint || 0) + '/问' + (pa.ask || 0) + '/拦' + (pa.deny || 0)
       + (pa.injectFail ? ' · ⚠注入失败' + pa.injectFail : '')
       + (pa.failOpen ? ' · ⚠fail-open' + pa.failOpen : ''));
+  }
+  // ★P019/M14 级判据（用户 2026-10-11 定为项目目标）：**能自己决定，就必须能被看见地决定。**
+  //   这一行是"我的自我决定"的审计面：①哪些是我设的、哪些还是出厂默认 ②我改了什么
+  //   ③**怎么否决**（不写否决路径的"可否决"只是一句话）。
+  //   全部**从 state 推导**——手写常量会与事实漂移（今天的六个失效实例全是这个形态）。
+  {
+    const rh2 = rhythmOf(state);
+    const selfRhythm = !!(state.rhythm && Object.keys(state.rhythm).length);
+    let mech = 0;
+    for (let i = 0; i < ids.length; i++) {
+      const q = state.problems[ids[i]];
+      if (!q || !d.isParked(q)) continue;
+      const ex = String((q.parked && q.parked.awakenWhen) || '').trim();
+      if (/^(after|cites|epsilon|exists|user)\s*[:：]/i.test(ex)) mech += 1;
+    }
+    lines.push('- 自我决定(P019/M14级判据·**能自己决定就必须能被看见地决定**)：'
+      + '节律' + (selfRhythm ? '**自我设定**' : '出厂默认')
+      + '(' + rh2.staleMinutes + 'min' + (typeof rh2.quietFrom === 'number' ? '/静默' + rh2.quietFrom + '-' + rh2.quietTo : '/不静默') + ')'
+      + ' · 可机械求值的承诺 ' + mech + ' 条'
+      + ' · 行动前检索' + (state.preAction && state.preAction.off ? '**已停用**' : '启用')
+      + ' · 否决路径：mpm_rhythm reset / 重命名 .mpm/preaction.rules.json / mpm_grant revoke');
   }
   lines.push(rhythmLine(state));   // ★P482④：节律必须可见，且标明"自我设定"还是"出厂默认"
   lines.push('- 指令：' + d.directiveText());
