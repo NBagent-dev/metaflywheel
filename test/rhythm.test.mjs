@@ -54,6 +54,16 @@ test('normalizeRhythm·越界被拒且不静默（不许把自己写死）', () 
   assert.equal(r2.rhythm.staleMinutes, 30);
 });
 
+test('normalizeRhythm·未提供的项不许报假警（undefined ≠ 越界）', () => {
+  // 实机撞到的：只想改陈旧阈值，工具把未提供的 fireThrottleMinutes(undefined) 也送进校验，
+  // 于是报了一条"越界"——值没错（保持原值），但**报了假警**。
+  // 假警的代价与恒真判据同族：它会训练我忽略 ⚠ 那一行。
+  const r = normalizeRhythm({ staleMinutes: 90, fireThrottleMinutes: undefined, quietFrom: undefined }, {});
+  assert.deepEqual(r.rejected, [], '未提供的项不是错误：' + JSON.stringify(r.rejected));
+  assert.equal(r.rhythm.staleMinutes, 90);
+  assert.equal(r.rhythm.fireThrottleMinutes, 45, '未提供的项保持原值');
+});
+
 test('isQuiet·静默时段（含跨午夜 23→07）', () => {
   const at = (h) => new Date(2026, 9, 11, h, 30, 0).getTime();
   const q = { quietFrom: 23, quietTo: 7 };

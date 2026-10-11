@@ -48,6 +48,10 @@ export function normalizeRhythm(patch, base) {
     const k = keys[i];
     if (INT_KEYS.indexOf(k) < 0) { rejected.push(k + '：不认识的项'); continue; }
     const v = patch[k];
+    // ★未提供（undefined）不是错误：实机撞到过——只想改陈旧阈值，工具把未提供的
+    //   fireThrottleMinutes(undefined) 也送进校验，报了一条"越界"。值没错，但**报了假警**。
+    //   假警与恒真判据同族：都会训练我忽略 ⚠ 那一行。只有显式 null 才是"清除此项"。
+    if (v === undefined) continue;
     if (v === null) { next[k] = null; continue; }        // 显式清除（静默时段）
     const b = BOUNDS[k];
     if (typeof v !== 'number' || !isFinite(v) || Math.round(v) !== v || v < b[0] || v > b[1]) {
