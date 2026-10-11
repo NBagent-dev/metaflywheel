@@ -137,12 +137,16 @@ export function auditAwaken(state, nowMs, opts) {
   const problems = st.problems || {};
   const ids = Object.keys(problems);
   const honored = [], overdue = [];
-  let woken = 0;
+  let woken = 0, honoredSeen = 0, overdueSeen = 0;
   for (let i = 0; i < ids.length; i++) {
     const p = problems[ids[i]];
     if (!p || !p.awake || !p.awake.at) continue;
     woken += 1;
-    if (p.awake.done) continue;                                  // ④ 已清账：不再统计
+    // ★从**事实**重算，而不是只信累加器：awake.done / awake.overdue 都是留在题上的事实。
+    //   2026-10-11 实机教训：honoredTotal 曾因"白名单重建"被擦成 0，而累加器**擦掉就回不来**
+    //   （P021 的 awake.done 明明还在，聚合数字却永久失真）⇒ **聚合量必须可重算**。
+    if (typeof p.awake.overdue === 'number') overdueSeen += p.awake.overdue;
+    if (p.awake.done) { honoredSeen += 1; continue; }             // ④ 已清账：不再统计
     const at = p.awake.at;
     const costAt = (typeof p.awake.costAt === 'number') ? p.awake.costAt : null;
     const progressed = ((p.updatedAt || 0) > at) || (costAt !== null && (p.cost || 0) > costAt);
@@ -166,8 +170,12 @@ export function auditAwaken(state, nowMs, opts) {
     woken: woken,
     honored: honored.length, honoredThisRound: honored.length,
     overdue: overdue.length, overdueThisRound: overdue.length,
-    honoredTotal: (prev.honoredTotal || 0) + honored.length,
-    overdueTotal: (prev.overdueTotal || 0) + overdue.length
+    // ★自愈：取「累加器」与「事实重算」的较大值——被擦过也不会倒退，且下次自动补回。
+    //   事实重算 = **已记在题上的**（awake.done / awake.overdue）+ **本轮新发生的**：
+    //   本轮新履行/新逾期的 done 与 overdue 要到本次审计里才写进题，只数"已记的"会漏掉本轮
+    //   （判据 promise-audit ⑤ 当场抓到这一点：孤零零一个"已履行 0"）。
+    honoredTotal: Math.max(prev.honoredTotal || 0, honoredSeen + honored.length),
+    overdueTotal: Math.max(prev.overdueTotal || 0, overdueSeen + overdue.length)
   };
   if (st.measure) st.measure.promiseStats = stats;
   const line = '- 承诺履行(P482⑨·最后一米)：已叫醒 ' + woken + ' · 已履行 ' + stats.honoredTotal + ' · 逾期 ' + stats.overdueTotal
