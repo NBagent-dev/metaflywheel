@@ -17,6 +17,42 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { evalAwaken, collectAwaken, shapeOfPromise } from '../engine/modules/promise.mjs';
+import { renderSelfSnapshot } from '../engine/modules/selfsnap.mjs';
+
+// ── ⑤ 渲染侧判据：**直接调 renderSelfSnapshot**（不再绕 mock 宿主）────────────
+// 教训：我先前四次都想通过 mock 宿主"装配出提示文本"，全部拿到空文本；正确答案是**直接调
+// 渲染函数**——它只要一个 deps 对象。（错在层选错了，不是引擎怪。）
+// 立这条判据的直接原因是线上事故：2026-10-10 深夜 selfsnap.mjs **第二次**因"替换整块丢变量
+// 声明"炸掉（上次是 fresh is not defined，连炸 9 轮；这次是 due is not defined），两次都由
+// P484 的保险丝兜住，两次都**没有任何判据覆盖渲染** ⇒ 同一个死法隔一晚再来一次。
+function renderWith(problems) {
+  const now = Date.now();
+  return renderSelfSnapshot({
+    state: {
+      seq: 1, problems: problems, sediments: [],
+      patrol: { rounds: 1, lastAt: now, lastReport: 'x' }, measure: {},
+      constitution: { autonomy: true, grantedAt: 0, log: [], lastFireAt: 0 },
+      valence: { events: [] }, narrations: []
+    },
+    perception: { lastInboxAt: now - 60000, inboxCount: 1, sessionStarts: 1 },
+    outsideCalls: 0, drift: { active: false, reason: '' }, retrievalHits: () => [],
+    valenceSummaryLine: () => '', directiveText: () => 'x',
+    isParked: (p) => !!(p && p.parked), isOpen: (p) => !!(p && p.open),
+    BOUNDARY_THRESHOLD: 5, runStampLine: () => ''
+  });
+}
+
+test('渲染·不得降级，且承诺与愿望必须分行点名', () => {
+  const now = Date.now();
+  const mk = (id, expr) => ({ id, title: id, stage: 'S', delta: 0.2, epsilon: 0.3, cost: 1, iteration: 1, createdAt: now - 1e6, updatedAt: now - 1e6, parked: { at: now - 1e6, note: '', awakenWhen: expr } });
+  const txt = renderWith({ P900: mk('P900', 'after:2030-01-01'), P901: mk('P901', '等用户确认发布') });
+  assert.ok(!/降级/.test(txt), '不得是降级快照（渲染抛错即降级——本判据正是为 due is not defined 那类事故立的）\n' + txt.slice(0, 300));
+  const pLine = txt.split('\n').find((l) => l.includes('承诺(P482')) || '';
+  const wLine = txt.split('\n').find((l) => l.includes('愿望(P482')) || '';
+  assert.ok(pLine.includes('P900'), '真承诺必须在承诺行：' + pLine.slice(0, 140));
+  assert.ok(!pLine.includes('P901'), '愿望不得混进承诺行：' + pLine.slice(0, 140));
+  assert.ok(wLine.includes('P901'), '自由文本必须在愿望行：' + wLine.slice(0, 140));
+});
 
 // ── 最小契约宿主（只为"快照渲染"那条判据：真实 apply + 真实 renderSelfSnapshot）──
 const ROOT = 'C:/mf-test-ws';

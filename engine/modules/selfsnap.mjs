@@ -200,6 +200,12 @@ function renderSnapshotInner(d) {
   //   才抓出自己兄弟的死代码）。此处只读不写，且未写承诺的题完全不出现在这一行。
   const prom = [];
   const wish = [];
+  // ★`due` 必须在这里声明：这是**同一类事故第二次**——上次是 `fresh is not defined`（替换整块时
+  //   丢掉块内变量定义 ⇒ 20:45–21:13 连续 9 轮提示装配失败）；这次是我用脚本替换时"加 wish 声明"
+  //   那一步的后半截丢了，`due` 被用了 2 处却从未声明 ⇒ 线上渲染当场抛错（降级快照）。
+  //   两次都由 P484 的保险丝兜住（降级但活着），两次都没有判据覆盖渲染 ⇒ 同一个死法隔一晚再来一次。
+  //   现已立判据：test/promise.test.mjs「渲染·不得降级，且承诺与愿望必须分行点名」（改前自证会红）。
+  const due = [];
   for (let i = 0; i < ids.length; i++) {
     const p3 = state.problems[ids[i]];
     if (!p3 || !d.isParked(p3)) continue;
