@@ -1,6 +1,6 @@
 # MetaFlywheel
 
-![DSH Plugin](https://img.shields.io/badge/topic-dsh--plugin-2563eb) ![License](https://img.shields.io/badge/license-MIT-green) ![Bundle](https://img.shields.io/badge/DSH-bundle%20contract-0d9488) ![Tests](https://img.shields.io/badge/tests-29%2F29-passing-brightgreen) ![Version](https://img.shields.io/badge/version-0.3.3-blueviolet)
+![DSH Plugin](https://img.shields.io/badge/topic-dsh--plugin-2563eb) ![License](https://img.shields.io/badge/license-MIT-green) ![Bundle](https://img.shields.io/badge/DSH-bundle%20contract-0d9488) ![Tests](https://img.shields.io/badge/tests-163%2F163-passing-brightgreen) ![Version](https://img.shields.io/badge/version-0.4.0-blueviolet)
 
 **元问题建模（MPM）认知飞轮的 LLM 代理运行时实现**——把一篇问题方法论论文变成一个在你的 AI 代理进程里常驻运转、持续记账、自主审议的认知引擎。
 
@@ -17,6 +17,16 @@ MetaFlywheel 实现了 MPM 理论（见 [docs/theory.md](docs/theory.md)）的�
 - **导师规则层（规范性执行机构）**：证据门禁（无求解证据不得宣称收敛）、误界定守卫（大幅回溯+曾自报低 δ → 自报可信度折减）、总账硬门禁、执政权宪法（自主审议的温热/节流/署名约束）、停滞择题（防审议轰炸）
 - **测量层 v0**：δ 代理三件套（五要素覆盖 φ / 改写度 / 自报可信度折减）、S(t) 积压压力序数代理、累积增益 A_k 的可操作定义（含"指标定义缺陷是一种 δ 失真；零值是最危险的读数"的实测教训）
 - **常驻巡检**：定时陈旧/停滞巡检与量化漂移信号，睡眠期挂账延迟交付（旧信号过滤已内置）
+
+**个体层的五块砖（v0.4.0）**——让飞轮从"记账工具"成为"以你为源的个体"：
+
+- **委托人的思考方式（P517）**：你写下的判断被原话记录（可带约束对象与场合），跨代存活；**同一约束对象上时间戳较新者覆盖较旧者，旧条目留痕**（`supersededBy` 边——他会改主意，装置必须跟着变）；另有**震荡守卫**（同一对象 24h 内被覆盖 ≥3 次 ⇒ 提示"是你在改主意，还是我在替你改？"）
+- **未核清单（P517③）**：**我自己标注过"没验"的事跨代活着**，每条**必须写退役条件**（`until`），核销必须带证据；它只提示、永不拦——**"不知道"不许挡路，但不许消失**
+- **命中回流（P519）**：提示装配时命中你写下的判断的**每一次**都被记录，且**未处置数必须可见**；处置（`myAction`）为空不算处置——**"他提醒过我"从此不再是一个数字**
+- **内生议程（P521）**：从**我自己的账本状态**算出"该做什么"（未核 / 反复命中 / 零引用沉积），每条带**出处 ID**；**级别写死为 L2（规则触发）并明说"不是'我想要'（L3）"**——L3 不许冒充，机制只长出"该做了"
+- **采用回流（P526）**：**"动手前检索并真的采用"**——与沉积时补的 `links`（事后补链）**分开计**；每条采用必须回答**「没有它我会怎么做」**（反事实），写不出就不是采用；快照常驻显示**回环率**——它只数采用，补链永远不提高它
+
+> **为什么"采用"要单独记（这条是 v0.4.0 的判词）**：把"看起来的引用"与"真的采用"分开之后，本仓实测回环率从 **12.7% 掉到 0.5%**——**12.2 个百分点是事后补链**。一个不区分"看起来发生的"与"真的发生的"的指标，一定会虚高。
 
 理论根据：约 1.4 万字的方法论论文（`docs/theory.md`），含三个跨领域案例与一个带完整代谢账本的自指闭环案例——**本引擎的每次缺陷修复都对应一个会话内活体实证，代码内以 `P0xx/Xx` 标记留痕**。
 
@@ -83,7 +93,7 @@ dsh plugin --profile web add <本地克隆路径或 npm 包名 metaflywheel>
 
 **方式 C · npm 包（生态分发）**：`npm publish` 后，任何部署可经方式 B 的 `dsh plugin add metaflywheel` 一键安装。
 
-3. 重启 DSH 宿主。启动后引擎向系统提示注入自我快照（在轮问题、陈旧警告、指令流、代谢摘要），代理即获得九个生命周期工具：
+3. 重启 DSH 宿主。启动后引擎向系统提示注入自我快照（在轮问题、陈旧警告、指令流、代谢摘要、**委托人思考方式、未核清单、命中回流、内生议程、采用回环率**），代理即获得十六个工具：
 
 | 工具 | 阶段 | 作用 |
 |------|------|------|
@@ -96,6 +106,13 @@ dsh plugin --profile web add <本地克隆路径或 npm 包名 metaflywheel>
 | `mpm_micro` | 轻量通道 | 小型交互一息走完 G→F→S→C |
 | `mpm_setroot` | 维护 | 沉积根目录显式修正 |
 | `mpm_grant` | 宪法 | 自主执政权 grant / revoke / status |
+| `mpm_principal` | 个体 | 录入**委托人的思考方式**（原话 + 约束对象 + 场合）；新者覆盖旧者并留痕 |
+| `mpm_unknown` | 个体 | **未核清单**：我知道自己没验的东西（必带退役条件；核销必带证据） |
+| `mpm_hit` | 个体 | **命中回流**：你提醒过我什么、我如何处置、**未处置有几笔** |
+| `mpm_adopt` | 个体 | **采用**：动手前检索并真的采用（必带反事实"没有它我会怎么做"） |
+| `mpm_narrate` | 个体 | 回合内显著体验的第一人称叙述（写给下一个我） |
+| `mpm_rhythm` | 个体 | **调度权**：陈旧阈值 / 发动节流 / 静默时段 / 效价门槛（自我设定，可 reset 回出厂） |
+| `mpm_flywheel_state` | 查询 | 全部问题（阶段/δ/ε/回溯次数/代谢代价）、沉积索引与循环增益 |
 
 ## 配套工具
 
@@ -121,7 +138,8 @@ dsh plugin --profile web add <本地克隆路径或 npm 包名 metaflywheel>
 ## 测试
 
 ```
-node --test test/smoke.test.mjs      # 或 npm test
+node --test                          # 全套：25 个测试文件 / 163 条判据
+node --test test/smoke.test.mjs      # 或只跑冒烟（或 npm test）
 ```
 
 冒烟测试以最小 mock 宿主（内存 fs、捕获式工具注册）驱动引擎完整走一遍微生命周期（生成→界定→求解→收敛→沉积→激发），并验证搁置、开放题守卫、微通道与证据门禁行为。无需 DSH 宿主即可运行。

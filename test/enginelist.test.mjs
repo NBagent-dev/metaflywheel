@@ -77,8 +77,17 @@ test('③★反例：改动一个曾不在清单里的模块 ⇒ 陈旧判定必
   // ★注意 API：`makeRunStamp()` **不设 `.stale`**（它只给 boot 时刻的对照字段，
   //   见 runstamp.mjs:183 的注释）——**权威结论在 `evaluateRunStamp(rs)`**。
   //   我第一版断言了 `rs.stale`（不存在的字段）⇒ 恒 falsy ⇒ 判据假红。
+  //
+  // ★★2026-10-11 修（今日第三次"判据量错对象"，也是最隐蔽的一次）：
+  //   `evaluateRunStamp` 有【两路】陈旧来源——`engineFiles`（本夹具控制得住）与
+  //   **`pkgMtime`（真实世界的读数，夹具管不着）**。上一版断言 `oldEv.stale === false`
+  //   （= 两路的并集）⇒ 只要跑测试时 dsh 包最近被动过，这条就【必然红】——
+  //   **测的又是运气**（正是它自己注释里自省过的那个病，只是换了入口）。
+  //   ⇒ 铁律：**判据的断言范围不许大于夹具的控制范围**。所以这里只断言【引擎源码这一路】。
   const oldEv = evaluateRunStamp(makeRunStamp({ now: now, bootAt: bootAt, engineFiles: [watched] }), now);
-  assert.equal(oldEv.stale, false, '旧清单确实会谎报（这条是场景复现，不是要求）');
+  const oldReasons = (oldEv.reasons || []).join('；');
+  assert.ok(oldReasons.indexOf('引擎源码') < 0,
+    '旧清单确实会谎报：它【不报】"引擎源码"这一路（场景复现，不是要求）。实收理由：' + oldReasons);
 
   // 新清单（自动发现，含那个模块）⇒ 必须报陈旧
   const newEv = evaluateRunStamp(makeRunStamp({ now: now, bootAt: bootAt, engineFiles: [watched, moduleF] }), now);
