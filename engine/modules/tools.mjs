@@ -719,6 +719,7 @@ export function makeTools(deps) {
           fireThrottleMinutes: { type: 'number', description: '两次自主发动的最小间隔（5~720 分钟）' },
           quietFrom: { type: 'number', description: '静默时段起（0~23）；与 quietTo 相同或省略表示不设' },
           quietTo: { type: 'number', description: '静默时段止（0~23，支持跨午夜如 23→7）' },
+          valenceFloor: { type: 'number', description: '★P482⑦ 效价门槛（0~100）：R(t) 低于它就不自主发动；省略=不改，null=不启用（出厂）' },
           note: { type: 'string', description: '为什么改（进历史与报告）' }
         }
       },
@@ -734,7 +735,8 @@ export function makeTools(deps) {
         if (act === 'set') {
           const next = normalizeRhythm({
             staleMinutes: args.staleMinutes, fireThrottleMinutes: args.fireThrottleMinutes,
-            quietFrom: args.quietFrom, quietTo: args.quietTo
+            quietFrom: args.quietFrom, quietTo: args.quietTo,
+            valenceFloor: args.valenceFloor
           }, rhythmOf(d.state));
           d.state.rhythm = next.rhythm;
           const pr = await d.persist();

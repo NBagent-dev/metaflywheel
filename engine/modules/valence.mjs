@@ -15,18 +15,38 @@ export function valenceRecord(state, kind) {
   } catch (e) { /* 效价记账永不阻断主流程 */ }
 }
 
+/**
+ * ★P482⑦：R(t) 的**唯一实现**（指数衰减和）。
+ * 抽出来的理由：效价门禁要读数，而"两处同义实现、改一处漏一处"是今天已经踩过的坑
+ * （prio 只加到了 clauseKind ⇒ 求值器不认 ⇒ 整条承诺永不唤醒）。
+ * ⇒ 宁可在这里抽一层，也不让 R(t) 有第二个算法。
+ * @param {object} state 账本
+ * @param {number} [nowMs] 基准时刻（判据要可控时间，故允许传入）
+ */
+export function valenceOf(state, nowMs) {
+  try {
+    const evs = (state && state.valence && Array.isArray(state.valence.events)) ? state.valence.events : [];
+    const now = (typeof nowMs === 'number') ? nowMs : Date.now();
+    let rt = 0;
+    for (let i = 0; i < evs.length; i++) {
+      const e = evs[i];
+      rt += e.v * Math.exp(-(now - e.at) / VALENCE_TAU_MS);
+    }
+    return Math.round(rt * 10) / 10;
+  } catch (e) { return 0; }
+}
+
 export function valenceSummaryLine(state) {
   try {
     const evs = state.valence && Array.isArray(state.valence.events) ? state.valence.events : [];
     if (!evs.length) return '';
     const now = Date.now();
-    let rt = 0, win = 0, pos = 0, neg = 0;
+    let win = 0, pos = 0, neg = 0;
     for (let i = 0; i < evs.length; i++) {
       const e = evs[i];
-      rt += e.v * Math.exp(-(now - e.at) / VALENCE_TAU_MS);
       if (now - e.at <= VALENCE_TAU_MS) { win += 1; if (e.v > 0) pos += 1; else if (e.v < 0) neg += 1; }
     }
-    rt = Math.round(rt * 10) / 10;
+    const rt = valenceOf(state, now);   // ★单一真源：数字只能从这里来
     return '- 效价：R(t)=' + (rt >= 0 ? '+' : '') + rt.toFixed(1) + '（近48h ' + win + ' 事件：正 ' + pos + ' · 负 ' + neg + '）——R1 效价账本 v1（P023），提示级强化数据源。';
   } catch (e) { return ''; }
 }

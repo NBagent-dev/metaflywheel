@@ -25,8 +25,19 @@ test('出厂默认必须等于引擎原有的常数（先证明我没偷偷改�
 });
 
 test('rhythmOf·没设置时给的就是出厂值（与引入前逐字一致）', () => {
-  assert.deepEqual(rhythmOf({}), { staleMinutes: 30, fireThrottleMinutes: 45, quietFrom: null, quietTo: null });
-  assert.deepEqual(rhythmOf(null), { staleMinutes: 30, fireThrottleMinutes: 45, quietFrom: null, quietTo: null });
+  // ★2026-10-11 修订（P482⑦ 效价门禁）：FACTORY 新增 `valenceFloor`（**出厂 null = 不启用**）。
+  //   "逐字一致"的**实质是行为一致**，不是键集合不变——所以本条改成两段断言：
+  //     ① **旧四项**必须逐字等于出厂常数（有人偷偷动它们 ⇒ 红）
+  //     ② **新项**必须是"不启用"（有人把新门禁默认打开 ⇒ 红）
+  //   ⇒ 它仍然抓得住它当初要抓的东西，只是把"新增一个默认关闭的开关"从红名单里移出去。
+  const legacy = { staleMinutes: 30, fireThrottleMinutes: 45, quietFrom: null, quietTo: null };
+  for (const s of [{}, null]) {
+    const r = rhythmOf(s);
+    assert.deepEqual(
+      { staleMinutes: r.staleMinutes, fireThrottleMinutes: r.fireThrottleMinutes, quietFrom: r.quietFrom, quietTo: r.quietTo },
+      legacy, '旧四项必须与引入前逐字一致');
+    assert.equal(r.valenceFloor, null, '效价门禁必须出厂不启用（不许默认打开）：' + JSON.stringify(r.valenceFloor));
+  }
   assert.equal(staleMsOf({}), 30 * 60000);
   assert.equal(throttleMsOf({}), 45 * 60000);
 });

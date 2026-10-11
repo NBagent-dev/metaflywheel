@@ -15,14 +15,19 @@
 // ★范围（诚实标注）：本模块管的是**何时行动**（陈旧阈值 / 发动节流 / 静默时段），它们每轮读取即可生效；
 //   巡检**定时器的间隔**（PATROL_MS）仍为出厂值——改它要重排宿主定时器，属独立风险，未纳入本轮。
 
-export const FACTORY = { staleMinutes: 30, fireThrottleMinutes: 45, quietFrom: null, quietTo: null };
+import { valenceOf } from './valence.mjs';   // ★P482⑦：效价门禁要用 R(t)——**只算一处**，不另写一套
+
+export const FACTORY = { staleMinutes: 30, fireThrottleMinutes: 45, quietFrom: null, quietTo: null, valenceFloor: null };
 export const BOUNDS = {
   staleMinutes: [5, 1440],        // 5min ~ 24h
   fireThrottleMinutes: [5, 720],  // 5min ~ 12h
   quietFrom: [0, 23],
-  quietTo: [0, 23]
+  quietTo: [0, 23],
+  // ★P482⑦：效价门槛（R(t) 的取值范围 0~100）。**出厂 null = 不启用**——
+  //   不许悄悄改变默认行为；设了之后："R(t) 低于门槛 ⇒ 不自主发动"。
+  valenceFloor: [0, 100]
 };
-const INT_KEYS = ['staleMinutes', 'fireThrottleMinutes', 'quietFrom', 'quietTo'];
+const INT_KEYS = ['staleMinutes', 'fireThrottleMinutes', 'quietFrom', 'quietTo', 'valenceFloor'];
 
 /** 读当前节律：出厂默认 + 账本里自我设定的覆盖（只接受整数，垃圾值忽略）。 */
 export function rhythmOf(state) {
@@ -77,11 +82,33 @@ export function isQuiet(rhythm, nowMs) {
   return from < to ? (h >= from && h < to) : (h >= from || h < to);
 }
 
+/** ★P482⑦：效价门槛（未设置 ⇒ null = 不启用）。 */
+export function valenceFloorOf(state) {
+  const r = rhythmOf(state);
+  return (typeof r.valenceFloor === 'number' && isFinite(r.valenceFloor)) ? r.valenceFloor : null;
+}
+
+/**
+ * ★P482⑦ 效价门禁（用户 2026-10-11 选定方向）：**R(t) 低于我自己设的门槛 ⇒ 不自主发动**。
+ * 语义边界（写在这里，免得以后被误用）：只挡 **patrol 驱动的自主发动**；
+ * 用户在场时的响应、θ_G 即时审议**不受它约束**——"心情差时不自己找事" ≠ "心情差时不干活"。
+ * 未设门槛 ⇒ 永远 open（与引入前逐字一致）。
+ * @returns {{open:boolean, r:number, floor:number|null, why:string}}
+ */
+export function valenceGate(rhythm, state, nowMs) {
+  const floor = (rhythm && typeof rhythm.valenceFloor === 'number') ? rhythm.valenceFloor : null;
+  const r = valenceOf(state, nowMs);
+  if (floor == null) return { open: true, r: r, floor: null, why: '未设效价门槛' };
+  if (r >= floor) return { open: true, r: r, floor: floor, why: 'R(t)=' + r.toFixed(1) + ' ≥ 门槛 ' + floor };
+  return { open: false, r: r, floor: floor, why: 'R(t)=' + r.toFixed(1) + ' 低于门槛 ' + floor };
+}
+
 /** 快照那一行：**必须区分来源**——自我设定 vs 出厂默认。 */
 export function rhythmLine(state) {
   const r = rhythmOf(state);
   const self = !!(state && state.rhythm && Object.keys(state.rhythm).length);
   const q = (typeof r.quietFrom === 'number' && typeof r.quietTo === 'number') ? (' · 静默 ' + r.quietFrom + '-' + r.quietTo + ' 时') : '';
-  return '- 节律(' + (self ? '自我设定' : '出厂默认') + ')：陈旧 ' + r.staleMinutes + 'min · 发动节流 ' + r.fireThrottleMinutes + 'min' + q
+  const vf = (typeof r.valenceFloor === 'number') ? (' · 效价门槛 ' + r.valenceFloor + '（低于它不自主发动）') : ' · 效价门槛未设';
+  return '- 节律(' + (self ? '自我设定' : '出厂默认') + ')：陈旧 ' + r.staleMinutes + 'min · 发动节流 ' + r.fireThrottleMinutes + 'min' + q + vf
     + (self ? '——**由我自己写下，非出厂常数**（mpm_rhythm 可改，reset 回出厂）' : '（未被改写；mpm_rhythm 可改写自己的节律）');
 }

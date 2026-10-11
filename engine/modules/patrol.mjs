@@ -11,7 +11,7 @@
 import { STAGE_NAMES } from "./util.mjs";
 
 import { collectAwaken, auditAwaken } from './promise.mjs';
-import { isQuiet, rhythmOf } from './rhythm.mjs';
+import { isQuiet, rhythmOf, valenceGate } from './rhythm.mjs';
 
 export function makePatrol(p) {
   const { state, isParked, isOpen, ensureLoaded, snapshot, persist, deliberate, fsSvc, root, PATROL_MS, FIRE_THROTTLE_MS, perception } = p;
@@ -187,7 +187,15 @@ export function makePatrol(p) {
       if (isQuiet(rh, nowMs)) {
         signals.push('静默时段(自我设定 ' + rh.quietFrom + '-' + rh.quietTo + ' 时)：本轮不发动，信号留到静默结束后');
       } else {
-        deliberate(signals, nowMs);
+        // ★P482⑦ 效价门禁（用户 2026-10-11 选定方向）：**R(t) 低于我自己设的门槛 ⇒ 不自主发动**。
+        //   语义边界：只挡 patrol 驱动的自主发动——**你说话时的响应、θ_G 即时审议都不受它约束**。
+        //   "心情差时不自己找事" ≠ "心情差时不干活"。
+        const vg = valenceGate(rh, state, nowMs);
+        if (!vg.open) {
+          signals.push('效价门禁(自我设定·门槛 ' + vg.floor + ')：R(t)=' + vg.r.toFixed(1) + ' 低于门槛 ⇒ 本轮不自主发动（心情差时不自己找事；你说话不受此约束）');
+        } else {
+          deliberate(signals, nowMs);
+        }
       }
       // ★P339：`lastReport` 是**历史记录**（本轮那一刻的快照），但 tools.mjs 的提示装配
       //   把它与当前 rounds 拼在一行、无时点地宣称「当前巡检状态」。
