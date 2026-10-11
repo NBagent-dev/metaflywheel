@@ -12,6 +12,7 @@ import { STAGE_NAMES } from "./util.mjs";
 
 import { collectAwaken, auditAwaken } from './promise.mjs';
 import { isQuiet, rhythmOf, valenceGate } from './rhythm.mjs';
+import { innerAgenda } from './agenda.mjs';   // ★P521：内生议程（**账本替我说该做什么**）
 
 export function makePatrol(p) {
   const { state, isParked, isOpen, ensureLoaded, snapshot, persist, deliberate, fsSvc, root, PATROL_MS, FIRE_THROTTLE_MS, perception } = p;
@@ -178,6 +179,18 @@ export function makePatrol(p) {
           signals.push('议程推进 ' + pick.id + '（' + STAGE_NAMES[pick.stage] + ' 阶段，' + ageMin + 'min 未推进）——在轮题即常设意图，直接推进该题并 mpm_solve 登记');
         }
       }
+      // ★P521 内生议程（L2）：**账本替我说该做什么**——触发源是"我自己的账本状态"，不是出厂时钟。
+      //   ★位置刻意放在"议程推进"【之后】：**在轮题优先，内生议程只作附加项**（P521 约束④）。
+      //   节流(45min)/静默时段/效价门禁都在下面的 deliberate 里 ⇒ 内生议程**天然受它们约束**（约束②）。
+      //   负控：账本干净 ⇒ innerAgenda 返回空 ⇒ **一条都不产生**（不许为了显得"自发"而造题）。
+      //   P484：装饰件不得成为单点故障 ⇒ 自带 try/catch。
+      try {
+        const ags = innerAgenda(state, nowMs);
+        for (let i = 0; i < ags.length; i++) {
+          signals.push('内生议程(出处 ' + ags[i].ref + ')：' + ags[i].text + '——' + ags[i].because
+            + '（**级别：L2 内生议程——规则触发，触发源是我自己的账本状态；不是"我想要"（L3）**）——认为值得就立题或推进，并 mpm_solve 登记');
+        }
+      } catch (e) { /* 内生议程永不阻断巡检 */ }
       // P019 审议循环（v6）：信号→意图→自主发动。执政权构成性开启；
       // 巡检承担代谢类信号（停滞/熵升）的定时审议，θ_G 类信号在 tools/result 当下即时审议。
       // ★P482④ 调度权：**静默时段**是自我设定的——此刻不该发动就不发动，信号留在本轮报告里。
