@@ -52,6 +52,8 @@ test('渲染·不得降级，且承诺与愿望必须分行点名', () => {
   assert.ok(pLine.includes('P900'), '真承诺必须在承诺行：' + pLine.slice(0, 140));
   assert.ok(!pLine.includes('P901'), '愿望不得混进承诺行：' + pLine.slice(0, 140));
   assert.ok(wLine.includes('P901'), '自由文本必须在愿望行：' + wLine.slice(0, 140));
+  // ★P482④ 接线判据：节律行必须真的渲染出来（"模块写好了但没接上线"正是 selfsnap 两次炸掉的那一层）
+  assert.match(txt, /节律\(出厂默认\)/, '未改写时必须标明"出厂默认"：' + txt.slice(0, 200));
 });
 
 // ── 最小契约宿主（只为"快照渲染"那条判据：真实 apply + 真实 renderSelfSnapshot）──
