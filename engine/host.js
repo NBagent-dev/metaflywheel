@@ -21,7 +21,7 @@ import { makeBoundaryGuard } from "./modules/guard.mjs";
 import { makeStateMachine } from "./modules/state.mjs";
 import { attachEventFaces } from "./modules/events.mjs";
 import { makePatrol } from "./modules/patrol.mjs";
-import { makeRunStamp, runStampLine } from "./modules/runstamp.mjs";
+import { makeRunStamp, runStampLine, discoverEngineFiles, evaluateRunStamp } from "./modules/runstamp.mjs";
 
 export const name = "mpm-flywheel";
 export const inject = ["systemPrompt", "tools", "fs", "sandboxPolicy", "timer"];
@@ -173,28 +173,20 @@ export function apply(ctx) {
   // P332/P171 落地：运行期自陈。启动只记纯本地量（bootAt/pid/argv1），文件探测懒做、结果缓存。
   // 为什么放在这里而不是 patrol：patrol 要等 20 分钟，而"我刚换了磁盘、跑的还是旧的"这件事
   // 必须在**第一次装配**就可见——那正是今天错过的那一刻。
-  // ★P507（2026-10-11 实证的谎报）：这里原来是**手写两行清单**（host.js + modules/selfsnap.mjs）。
-  //   后果：我改了 valence / rhythm / patrol / tools / promise 之后，快照仍宣称
-  //   「磁盘未变，跑的就是最新一份」——**安全网在最需要它的那一刻撒了谎**
-  //   （它是"我跑的是不是旧代码"的唯一提示者，P171/P332 立的规矩全靠它）。
-  //   "手写清单"这个形态今天出现三次（测试清单 11 vs 14 个文件；64 vs 87 项）。
-  //   ⇒ 改为**自动发现**：host.js + modules/ 下所有非探针 .mjs。
-  const ENGINE_FILES = (function () {
-    const dir = new URL('./', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
-    const out = [dir + 'host.js'];
-    try {
-      const entries = fs.readdirSync(dir + 'modules');
-      for (let i = 0; i < entries.length; i++) {
-        const f = entries[i];
-        if (f.slice(-4) === '.mjs' && f.charAt(0) !== '_') out.push(dir + 'modules/' + f);
-      }
-    } catch (e) { /* 目录读不到 ⇒ 至少保留 host.js：宁可漏报，不可谎报"没变" */ }
-    return out;
-  })();
+  // ★P507（2026-10-11，两轮才查清）：清单**必须发现出来，且只有一份实现**。
+  //   第一版是手写两行（host.js + selfsnap.mjs）⇒ 13 个模块不在监视范围 ⇒ 谎报「磁盘未变」。
+  //   第二版把发现逻辑内联在这里 ⇒ 而 host.js **没有 import fs** ⇒ `fs.readdirSync` 抛
+  //   ReferenceError ⇒ **被 try/catch 静默吞掉** ⇒ 清单退化成 [host.js] ⇒ 继续谎报。
+  //   而当时两条判据在结构上都不可能发现它（一条静态看源码里有没有 readdirSync；
+  //   一条在测试里复刻了逻辑、测试自己有 fs）⇒ 现在只调 runstamp.mjs 里那一份，判据测同一个函数。
+  const ENGINE_FILES = discoverEngineFiles(new URL('./', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
   state.runStamp = makeRunStamp({ engineFiles: ENGINE_FILES });
-  if (state.runStamp.stale) {
-    console.log('[mpm][runstamp] ⚠ ' + state.runStamp.reasons.join('；'));
-  }
+  // ★同时修掉一处**从来没响过的告警**：`makeRunStamp()` 不设 `.stale`
+  //   （权威结论在 evaluateRunStamp，见 runstamp.mjs:183）⇒ 原来的 `if (state.runStamp.stale)` 恒 undefined。
+  try {
+    const ev = evaluateRunStamp(state.runStamp);
+    if (ev.stale) console.log('[mpm][runstamp] ⚠ ' + ev.reasons.join('；'));
+  } catch (e) { /* 启动告警失败不得影响启动 */ }
   // M1 记忆唤醒（个体大脑 · 自我快照）：
   // text 为函数，系统提示每次组装时求值——个体在每次咨询群体超脑(LLM)前，
   // 把当前自我（在轮身份/记忆/代谢）实时重建进超脑的工作记忆。空态返回 ''，

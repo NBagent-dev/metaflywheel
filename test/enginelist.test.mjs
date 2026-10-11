@@ -17,37 +17,46 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { makeRunStamp, evaluateRunStamp } from '../engine/modules/runstamp.mjs';
+import { makeRunStamp, evaluateRunStamp, discoverEngineFiles } from '../engine/modules/runstamp.mjs';
 
 const ENGINE = path.resolve(new URL('../engine', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
 const HOST = path.join(ENGINE, 'host.js');
 const SRC = fs.readFileSync(HOST, 'utf8');
 
-/** 复刻 host.js 的发现规则（host.js + modules/*.mjs，排除 _ 开头的探针）。 */
+/** ★只调引擎自己的那一份实现。上一版在这里**复刻**了发现逻辑（测试自带 fs）——
+ *  于是 host.js 缺 import fs 那个致命 bug 被判据完美地漏掉了。**复刻 = 两处同义代码。** */
 function discovered() {
-  const out = [HOST];
-  for (const f of fs.readdirSync(path.join(ENGINE, 'modules'))) {
-    if (f.endsWith('.mjs') && !f.startsWith('_')) out.push(path.join(ENGINE, 'modules', f));
-  }
-  return out;
+  return discoverEngineFiles(ENGINE.replace(/\\/g, '/') + '/');
 }
 
-test('①静态：host.js 必须自动发现引擎文件（readdirSync），不许退回手写清单', () => {
-  assert.ok(SRC.indexOf('readdirSync') >= 0,
-    'host.js 里找不到自动发现 ⇒ 又变回手写清单了（P507 会复发）');
-  assert.ok(/const ENGINE_FILES = \(function/.test(SRC) || /ENGINE_FILES[\s\S]{0,200}readdirSync/.test(SRC),
-    'ENGINE_FILES 必须由发现逻辑构造');
+test('①静态：host.js 必须调引擎自己的发现函数，且**不许直接使用 fs**', () => {
+  // ★这条是 P507 复发的克星。为什么前两条判据都漏了？
+  //   旧①是静态检查"源码里有没有 readdirSync" ⇒ 有，绿；而 host.js 没有 import fs，
+  //   `fs.readdirSync` 运行时抛 ReferenceError，**被 try/catch 静默吞掉**，清单退化成 [host.js]。
+  //   旧②在测试里复刻了逻辑（测试自己有 fs）⇒ 15 个文件，也绿。
+  //   ⇒ 结构上不可能发现。现在：发现逻辑只有一份（runstamp.mjs），并禁止 host.js 直接碰 fs。
+  assert.ok(/import\s*\{[^}]*discoverEngineFiles[^}]*\}\s*from\s*["']\.\/modules\/runstamp\.mjs["']/.test(SRC),
+    'host.js 必须从 runstamp.mjs 导入 discoverEngineFiles');
+  // ★口径要精确：只看 ENGINE_FILES 那一段，不要扫全文——
+  //   第一版扫全文找 `fs.` ⇒ 撞上别处的合法提及 ⇒ 假警（今天第四次口径问题）。
+  const at = SRC.indexOf('const ENGINE_FILES');
+  assert.ok(at > 0, 'host.js 里找不到 ENGINE_FILES 的构造');
+  const block = SRC.slice(at, at + 700);
+  assert.ok(block.indexOf('discoverEngineFiles(') >= 0, 'ENGINE_FILES 必须由 discoverEngineFiles 构造');
+  assert.ok(!/\bfs\s*\./.test(block),
+    'ENGINE_FILES 那一段不许直接碰 fs（host.js 没有 import fs ⇒ fs.* 会抛 ReferenceError 并被 catch 吞掉）');
 });
 
 test('②行为：清单必须覆盖全部非探针模块（不许只盯一两个）', () => {
   const list = discovered();
-  const mods = list.filter((p) => path.dirname(p) === path.join(ENGINE, 'modules'));
-  // ★不许写魔法阈值（第一版我写了 ≥15，实际 14 ⇒ 假警）：判据应当**从事实推导**——
-  //   清单长度必须恰好等于「host.js + 全部非探针模块」。
+  // ★口径统一：discoverEngineFiles 返回的是**正斜杠**路径，别拿 path.dirname 去比反斜杠
+  //   （第一版这么比 ⇒ 模块数算成 0 ⇒ 假警。今天第四次口径问题。）
+  const norm = (p) => p.replace(/\\/g, '/');
+  const mods = list.filter((p) => norm(p).indexOf(norm(ENGINE) + '/modules/') === 0);
   assert.equal(list.length, mods.length + 1, '清单必须含 host.js 本身且不漏不多（模块 ' + mods.length + ' 个）');
   assert.ok(mods.length >= 5, '引擎模块数至少应有几个（实得 ' + mods.length + '）——判据锚点可能失效');
   for (const must of ['valence.mjs', 'rhythm.mjs', 'patrol.mjs', 'tools.mjs', 'promise.mjs', 'selfsnap.mjs']) {
-    assert.ok(list.some((p) => p.endsWith(must)), must + ' 必须在监视范围内（P507 漏的正是这一族）');
+    assert.ok(list.some((p) => norm(p).endsWith(must)), must + ' 必须在监视范围内（P507 漏的正是这一族）');
   }
 });
 

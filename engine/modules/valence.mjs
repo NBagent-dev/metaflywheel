@@ -50,3 +50,6 @@ export function valenceSummaryLine(state) {
     return '- 效价：R(t)=' + (rt >= 0 ? '+' : '') + rt.toFixed(1) + '（近48h ' + win + ' 事件：正 ' + pos + ' · 负 ' + neg + '）——R1 效价账本 v1（P023），提示级强化数据源。';
   } catch (e) { return ''; }
 }
+
+
+// ★P507 验收探针(13:48:04 重打，可删)：只为改变 mtime —— 验证实例是否在监视【旧清单之外】的模块。

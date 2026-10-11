@@ -99,6 +99,31 @@ function versionFrom(pkgPath) {
 }
 
 /**
+ * ★P507：**引擎文件清单必须发现出来，不能手写。**
+ * 放在本模块（而不是 host.js 里）的理由是**血的教训**：
+ *   第一版把发现逻辑写在 host.js 的内联 IIFE 里，而 host.js **没有 import fs** ⇒
+ *   `fs.readdirSync` 抛 ReferenceError ⇒ 被那个 try/catch **静默吞掉** ⇒
+ *   清单退化成 `[host.js]` 一个文件 ⇒ 快照照样宣称「磁盘未变，跑的就是最新一份」。
+ *   而当时的两条判据**在结构上都不可能发现它**：①是静态的（源码里有 readdirSync 就绿）
+ *   ②在测试里复刻了一份发现逻辑（测试自己有 fs）⇒ 「两处同义代码」again。
+ *   ⇒ 现在只有这里一份实现：host.js 调它，判据也调它。
+ * @param {string} engineDir 引擎目录（以 / 结尾的绝对路径，Windows 形如 C:/.../engine/）
+ * @returns {string[]} host.js + modules/ 下所有非 `_` 开头的 .mjs
+ */
+export function discoverEngineFiles(engineDir) {
+  const dir = String(engineDir || '');
+  const out = [dir + 'host.js'];
+  try {
+    const entries = fs.readdirSync(dir + 'modules');
+    for (let i = 0; i < entries.length; i++) {
+      const f = entries[i];
+      if (f.slice(-4) === '.mjs' && f.charAt(0) !== '_') out.push(dir + 'modules/' + f);
+    }
+  } catch (e) { /* 目录读不到 ⇒ 至少保留 host.js：宁可漏报，不可谎报"没变" */ }
+  return out;
+}
+
+/**
  * ★这里踩过一次「探测做在启动、结论冻在启动」——模块因此抓不到它自己存在的理由。
  *   第一版：makeRunStamp 在 boot 时算一次 reasons 就存进 state。
  *   后果：**真实情形（长命进程先起、磁盘后变）永远抓不到** —— 启动时文件还没改，
