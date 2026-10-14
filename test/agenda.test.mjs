@@ -36,16 +36,21 @@ test('③反复命中：同一 key ≥' + HIT_REPEAT_MIN + ' 次【且仍有欠�
   //      "全部已处置 ⇒ 不提"由 test/hit-discriminator.test.mjs 判据① 看守（两条判据各管一半）。
   const hitOpen = (at, key) => ({ id: 'H' + at, at, key, tool: 't', verdict: 'hint', disposedAt: null });
   const two = { hits: [hitOpen(1, 'K'), hitOpen(2, 'K')] };
-  assert.equal(innerAgenda(two, 3000).length, 0, '2 次不到阈值，不许提（负控）');
+  assert.equal(innerAgenda(two, 3000).filter(i => i.kind === 'hit-repeat').length, 0, '2 次不到阈值，不许提（负控）');
   const three = { hits: [hitOpen(1, 'K'), hitOpen(2, 'K'), hitOpen(3, 'K')] };
-  const a = innerAgenda(three, 4000);
-  assert.equal(a.length, 1);
-  assert.equal(a[0].ref, 'hits:K');
-  assert.match(a[0].because, /未处置|仍未解决/, '理由必须指向账本里可核对的事实，不许是"通常…而是…"这类格言');
-  // ★负控（新增）：全部已处置且无 stillOpen ⇒ **不得产出**
+  // ★★2026-10-14 再修订（P537）：本判据考的是 hit-repeat【这一类】议题在不在，
+  //   而 P537 新增了 hit-open（欠账）来源且权重更高 ⇒ 断言必须【筛选出 hit-repeat】再看，
+  //   不能断言"总数 === 1"或"第一条是它"——那是断言范围大于它真正要测的东西。
+  const hr = innerAgenda(three, 4000).filter(i => i.kind === 'hit-repeat');
+  assert.equal(hr.length, 1);
+  assert.equal(hr[0].ref, 'hits:K');
+  assert.match(hr[0].because, /未处置|仍未解决/, '理由必须指向账本里可核对的事实，不许是"通常…而是…"这类格言');
+  // ★负控（新增）：全部已处置且无 stillOpen ⇒ **不得产出 hit-repeat**（也不得产出 hit-open）
   const threeDisposed = { hits: [hit(1, 'K'), hit(2, 'K'), hit(3, 'K')] };
-  assert.equal(innerAgenda(threeDisposed, 4000).length, 0,
+  const none = innerAgenda(threeDisposed, 4000);
+  assert.equal(none.filter(i => i.kind === 'hit-repeat').length, 0,
     '★现场复现：28 次全部已处置且无 stillOpen ⇒ 不产出——那是我这一轮的工作主题，不是欠账');
+  assert.equal(none.filter(i => i.kind === 'hit-open').length, 0, '无欠账 ⇒ 也不许产出 hit-open（负控）');
 });
 
 test('④零引用沉积：>=' + STALE_DEPOSIT_DAYS + ' 天才提；新的不提（负控）', () => {

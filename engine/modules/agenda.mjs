@@ -72,6 +72,30 @@ export function innerAgenda(state, now) {
     });
   }
 
+  // ④ 未清账的命中（P537）：**"未处置必须可见"只做到了"可见"，没做到"会被推动"**。
+  //   现场（2026-10-11 自主发动）：快照连续四轮显示「未处置 4 次」，而我连续四轮没清它
+  //     ⇒ 根因：② 的门槛在【总命中数】上（`total[k] < HIT_REPEAT_MIN`）
+  //     ⇒ **单笔欠账永远不会变成议程**（除非同一件事欠够 3 次）
+  //   ★本来源只看"有没有欠账"，**与它被提醒过几次无关**——欠账是硬的，不取决于次数。
+  //   ★权重高于 ②：**"真的欠着"比"反复出现"更硬**（否则后者会盖过前者）。
+  const open = outstandingHits(hits);
+  if (open.length) {
+    const keys = [], seen = Object.create(null);
+    for (const h of open) {
+      const k = String((h && h.key) || '').trim();
+      if (k && !seen[k]) { seen[k] = 1; keys.push(k); }
+    }
+    out.push({
+      kind: 'hit-open', level: LEVEL, ref: 'hits:open', key: keys[0] || '',
+      text: '有 ' + open.length + ' 笔命中还没清账：'
+        + keys.slice(0, 3).map(function (k) { return '「' + k + '」'; }).join(' · ')
+        + (keys.length > 3 ? ' 等 ' + keys.length + ' 个对象' : ''),
+      because: '**未处置是我欠的账**——命中了却没说清怎么处置，等于没被约束过'
+        + '（用 `mpm_hit action=dispose` 留痕；处置了但它仍挂着 ⇒ 传 `stillOpen: true`）',
+      weight: 40 + open.length
+    });
+  }
+
   // ③ 零引用沉积：写过、但此后没人（包括我）再用过它
   const seds = Array.isArray(st.sediments) ? st.sediments : [];
   for (const s of seds) {

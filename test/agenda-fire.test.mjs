@@ -59,7 +59,10 @@ test('⑪★实例级探针：runPatrol 真的把内生议题送进了 deliberat
   const got = await runWith(fixture(), now);
   const ags = got.filter(function (s) { return s.indexOf('内生议程(出处 ') === 0; });
   assert.ok(ags.length >= 1, 'runPatrol 没有把内生议题送进发动函数。实收信号：' + JSON.stringify(got, null, 1));
-  assert.match(ags[0], /出处 hits:项目定位|出处 U1/, '必须带出处：' + ags[0]);
+  // ★★2026-10-14 修订（P537）：本条测的是【内生议题带出处】这个性质，
+  //   不是"某一条特定议题排第一"。P537 新增 hit-open（欠账）来源且权重更高 ⇒
+  //   写死 `/出处 hits:项目定位|出处 U1/` 会变成"断言范围大于它真正要测的东西"。
+  assert.match(ags[0], /\(出处 [^)]+\)/, '必须带出处（ref）：' + ags[0]);
   assert.match(ags[0], /不是"我想要"/, '必须自陈不是 L3：' + ags[0]);
   assert.match(ags[0], /L2 内生议程——规则触发/, '必须写明级别与触发源');
   // ★约束④：在轮题优先 ⇒ "议程推进"若出现，必须排在内生议程之前。
