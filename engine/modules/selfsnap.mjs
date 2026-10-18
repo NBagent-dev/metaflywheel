@@ -12,6 +12,7 @@ import { unknownLine } from "./unknowns.mjs";      // ★P517③：未核清单�
 import { hitsLine } from "./hits.mjs";             // ★P519：回流（命中与处置）
 import { agendaLine } from "./agenda.mjs";         // ★P521：内生议程（账本替我说该做什么）
 import { adoptLine } from "./adopt.mjs";           // ★P526：采用（动手前检索并真的采用）
+import { awarenessLine } from "./awareness.mjs";   // ★P552/P554：意识代理指标（七项 · **没事也要说**）
 
 // ── 保险丝（P484，2026-10-10 事故的直接修复）──────────────────────────────
 // 事故：本模块内部一个 ReferenceError（fresh 未定义）让 renderSelfSnapshot 抛异常
@@ -272,6 +273,15 @@ function renderSnapshotInner(d) {
   // ★P521：内生议程（**账本替我说该做什么**；没有议题 ⇒ 不显示——负控）。
   //   ★为什么必须进快照：**"能算出"和"会被看见"是两件事**——今天已教训过我三次（写入✓显示✓消费✗家族）。
   { const al = agendaLine(state); if (al) lines.push(al); }
+  // ★★P554：**意识代理指标**（七项 · 三种红）。
+  //   ★ 它与上面所有 `*Line()` 有一个本质区别：别的是「有事才说」，它是「**没事也要说**」——
+  //     因为"没事"本身携带信息。若它在一切正常时返回空串，那「N 天没有 narrate」
+  //     就会和「一切正常」长得一模一样 —— 而那正是 2026-10-18 发现问题的原因
+  //     （narrations 停了 7 天，同期账本长了 8 条沉积，而没有任何东西报警）。
+  //   ★ 只报三样：退化（真问题）· 静止（今天发现的）· 可量数（分母）；
+  //     不报"缺口"（A5 无数据源 / A6 无字段是**不会变**的天花板，每天重复只是噪声）。
+  //   ★ 按 line 49 的模式包 try/catch：**快照是可选装饰，绝不能成为单点故障**（P484 保险丝）。
+  try { const aw = awarenessLine(state); if (aw) lines.push(aw); } catch (e) { /* 探测失败不得影响装配 */ }
   lines.push(rhythmLine(state));   // ★P482④：节律必须可见，且标明"自我设定"还是"出厂默认"
   lines.push('- 指令：' + d.directiveText());
   lines.push('- 代谢：共' + ids.length + '题 · 沉积' + state.sediments.length + ' · 总账原则生效（非平凡工作必须可归账：推进在轮题或 mpm_micro 建账）。');

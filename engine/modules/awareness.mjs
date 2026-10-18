@@ -140,3 +140,49 @@ export function renderPanel(panel) {
   out.push('  ★ 本面板不回答"它有没有意识"（P512：原则上不可判定）。它只回答"这七项现在是什么状态"。');
   return out.join('\n');
 }
+
+/**
+ * ★★P554 快照里的一行摘要。
+ *
+ * ★ 它与 selfsnap 里其它所有 `*Line()` **有一个本质区别**：
+ *   别的 Line 是「有事才说」（没有命中记录 ⇒ 返回空串，`hitsLine` 就是这样）。
+ *   而这一行是「**没事也要说**」——因为"没事"本身携带信息：
+ *   若它在一切正常时返回空串，那「7 天没有 narrate」就会和「一切正常」长得一模一样。
+ *   ⇒ 而那正是 2026-10-18 发现那个问题的原因（narrations 停了 7 天，没有任何东西报警）。
+ *
+ * ★ 为什么不把整个 panel 塞进快照：快照有大小预算（P073「缓存面①注入塌缩」），
+ *   而且「缺口」（A5 无数据源 / A6 无字段）是**不会变**的，每天重复同一句只是噪声。
+ *   ⇒ 所以只保留三样：**退化（真问题）· 静止（今天发现的）· 可量数（分母）**。
+ *
+ * @returns {string} 永远非空（除非 state 完全为空）
+ */
+export function awarenessLine(state, opts) {
+  const p = awarenessPanel(state, opts);
+  if (!p || !Array.isArray(p.items) || !p.items.length) return '';
+  const measurable = p.items.filter(function (i) { return i.kind === 'auditable'; }).length;
+  const total = p.items.length;
+
+  // 静止项带上具体的"多少天"，否则读者不知道它停了多久
+  let staleDetail = p.stale.map(function (id) {
+    const it = p.items.find(function (x) { return x.id === id; });
+    if (!it) return id;
+    return id + (it.ageDays != null ? '（' + it.ageDays + ' 天未叙述）' : '');
+  });
+
+  // ★★P554 修（写负控时发现）：**"从未叙述"比"N 天未叙述"更严重，却会被显示成「静止 无」**。
+  //   原因：`narrations` 为空 ⇒ `ageDays = null` ⇒ 不进 `p.stale`（它只收 ageDays > staleDays 的）。
+  //   ⇒ 而那正是"静止"这个信号最不该丢的情形 —— 一个从未叙述的账本，看起来会和"一切正常"一样。
+  //   ⇒ 所以这里特判：**从未叙述 ⇒ 必须显式写在「静止」位上**，不许降级成"无"。
+  const a7 = p.items.find(function (x) { return x.id === 'A7'; });
+  if (a7 && a7.ageDays == null && staleDetail.length === 0) {
+    staleDetail = ['A7（从未叙述）'];
+  }
+
+  const head = p.degraded.length ? '⚠ 意识代理指标（退化）' : '意识代理指标';
+  return '- ' + head + '：退化 ' + (p.degraded.length ? p.degraded.join(',') : '无')
+    + ' · 静止 ' + (staleDetail.length ? staleDetail.join(',') : '无')
+    + ' · 可量 ' + measurable + '/' + total
+    + (p.gaps.length ? '（' + p.gaps.join('/') + ' 无数据源或无字段，不是失败）' : '')
+    + '。';
+}
+
