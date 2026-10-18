@@ -112,6 +112,14 @@ export function failureToAction(toolName, text) {
   const t = String(text == null ? '' : text);
   const tn = String(toolName == null ? '' : toolName);
 
+  // ★★ 只看【前 5 行】—— 而这是 2026-10-18 一个真实误报逼出来的：
+  //   起因：我的一个脚本在输出里【打印了一条沉积的标题】，而那个标题含 "not found"，
+  //   于是本函数把"输出里有 not found"当成了"读不到路径" ⇒ 误报 path-guess。
+  //   ⇒ 而误报比漏报更糟：它会让提示变成噪声，而噪声会被忽略（那就毁掉了整个机制）。
+  //   ★ 而真实错误消息的特征是【它在最前面】（工具失败时错误在最前，正常输出在其后）。
+  //   ⇒ 所以：错误短语必须在【头部】才算数，不是"全文出现过"。
+  const head = t.split('\n').slice(0, 5).join('\n');
+
   // ① edit 被读守卫拒（P027-M17 那条纪律治的正是它）
   if (/has not been read|file has not been read/i.test(t)) return 'edit-blocked';
 
@@ -119,7 +127,13 @@ export function failureToAction(toolName, text) {
   if (/不存在的沉积 ID|已拒绝/.test(t) && /沉积/.test(t)) return 'id-guess';
 
   // ③ 猜了路径：读/找失败
-  if (/not found|cannot read|does not exist|路径不存在|找不到.*文件/i.test(t)) return 'path-guess';
+  //   ★★ 而这里【按工具类型】判，不是按"第几行"—— 这是判据 ⑩ 用红字教我的：
+  //     我最初想用"只看前 5 行"来防误报，但那个阈值是我拍的，而且方向就错了：
+  //     **pwsh 打印 "not found" 是完全正常的**（脚本在输出内容），
+  //     而 read 只读一个文件，它的 "not found" 就是失败。
+  //     ⇒ 所以真正区分的不是"第几行"，是【哪个工具】。
+  //     （与 exit code 那条同一个道理：不是"文本里有它"，是"这个工具的失败长这样"。）
+  if (isFileTool(tn) && /not found|cannot read|does not exist|路径不存在|找不到.*文件/i.test(t)) return 'path-guess';
 
   // ④ shell 非零退出（★ 只认非零；0 是成功）
   //   ★ 而且【只有 shell 类工具】才认 —— 否则别的工具输出里偶然出现 "[exit code:" 字样就会误报
@@ -132,5 +146,15 @@ export function failureToAction(toolName, text) {
 /** 只在"这个工具可能是 shell"时才认 exit code —— 防止 edit 返回里偶然出现 exit code 字样 */
 export function isShellTool(toolName) {
   return /^(pwsh|bash|sh|shell|powershell|cmd)$/i.test(String(toolName == null ? '' : toolName));
+}
+
+/**
+ * ★ 只在"这个工具是【读单一文件】类"时才认 "not found"。
+ *   理由：read/edit 的 not found 就是失败；而 pwsh 打印 not found 是在输出内容。
+ *   ★ 这是判据 ⑩ 用红字教出来的：我本来想用"只看前 N 行"，但那个阈值是我拍的，
+ *     而【工具类型】才是真正的区分依据。
+ */
+export function isFileTool(toolName) {
+  return /^(read|edit|write|write_file|fs_read|fs_write|notebookedit)$/i.test(String(toolName == null ? '' : toolName));
 }
 

@@ -43,6 +43,25 @@ test('⑧ 优先级：一笔 edit 同时含 "not found" 与 "has not been read" 
   assert.equal(failureToAction('edit', 'file has not been read yet; also target not found'), 'edit-blocked');
 });
 
+test('⑩ ★★ 误报防护：错误短语出现在【输出深处】必须不算（真实误报逼出来的）', () => {
+  // 2026-10-18 实况：脚本打印了一条沉积标题「…edit 的 4 空格缩进必然 not found」，
+  // 而 failureToAction 把"输出里有 not found"当成了"读不到路径" ⇒ 误报 path-guess。
+  const deep = [
+    '═══ 查 edit / old_string 相关 ═══',
+    '  P358-M304  预测事件表复检…',
+    '  P401-M344  edit 匹配串只取内容本身…',
+    '  P408-M348  改卡不该靠字符串匹配：edit 的 4 空格缩进必然 not found',
+    '  P427-M365  rev 逐字回嘴 wor 的格子…',
+    '  共 12 条'
+  ].join('\n');
+  assert.equal(failureToAction('pwsh', deep), null, '★ 第 4 行含 not found，但那不是失败消息 ⇒ 必须沉默');
+});
+
+test('⑪ 而真正的错误在【头部】时仍然认（不许因为防误报而漏报）', () => {
+  const real = ['Error: cannot read "C:/x/y.md": not found', '', '后面还有很多正常输出…', 'a', 'b', 'c'].join('\n');
+  assert.equal(failureToAction('read', real), 'path-guess', '★ 错误在第 1 行 ⇒ 必须认');
+});
+
 test('⑨ collectText 只取 {type:text}，不把结构化字段塞进正则', () => {
   assert.equal(collectText({ content: [{ type: 'text', text: 'a' }, { type: 'image', data: 'b' }, { type: 'text', text: 'c' }] }), 'a\nc');
   assert.equal(collectText({}), '');
