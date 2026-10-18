@@ -59,7 +59,17 @@ export function innerAgenda(state, now) {
 //     新：「其中 M 次是未处置 / 处置时明确标了'仍未解决'」（这是账本）
   const hits = Array.isArray(st.hits) ? st.hits : [];
   const total = Object.create(null), owed = Object.create(null);
-  for (const h of hits) { if (h && h.key) total[h.key] = (total[h.key] || 0) + 1; }
+  // ★P574：`total` 数的是【被提醒次数】，而 `owed` 数的是【未处置的事件数】。
+  //   在 P574 之前，hit 阵列是"一次注入一条" ⇒ 阵列长度同时充当这两个数，
+  //   于是「同一句话被注入了 18 次」被读成「你欠了 18 笔债」。
+  //   ⇒ 现在 recordHit 会把【同一 key 未处置期间的连续注入】合并进 `count`，
+  //     所以 `total` 必须累加 `count`，而 `owed` 仍然数条（一笔事件算一笔欠账）。
+  //   **这是两个不同的量第一次真的分开**：被提醒 N 次 ≠ 欠着 N 笔。
+  for (const h of hits) {
+    if (!h || !h.key) continue;
+    const n = (typeof h.count === 'number' && h.count > 0) ? h.count : 1;
+    total[h.key] = (total[h.key] || 0) + n;
+  }
   for (const h of outstandingHits(hits)) { if (h && h.key) owed[h.key] = (owed[h.key] || 0) + 1; }
   for (const k of Object.keys(total)) {
     if (total[k] < HIT_REPEAT_MIN) continue;             // 负控：2 次不提

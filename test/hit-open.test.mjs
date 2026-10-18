@@ -45,10 +45,13 @@ test('③stillOpen=true 也算欠账 ⇒ 必须产出（处置 ≠ 解决）', (
 });
 
 test('④多条欠账 ⇒ 文本写出笔数，且 key 去重列出', () => {
+  // ★P574：桩改用【三个不同 key】表达"三笔欠账"。
+  //   因为同一个 key 在未处置期间的连续命中会合并成一条 —— 那是同一件事被踩两次，
+  //   不是两笔独立的欠账。**而"欠三笔"这个说法必须有三个不同的洞支撑。**
   let l = [];
   l = recordHit(l, mk('A', 1)).list;
   l = recordHit(l, mk('B', 2)).list;
-  l = recordHit(l, mk('A', 3)).list;                       // A 欠两笔
+  l = recordHit(l, mk('C', 3)).list;                       // A/B/C 各欠一笔
   const open = kindOf(st(l), 'hit-open');
   assert.equal(open.length, 1, '只报一条（一条议程覆盖全部欠账，不是每条一笔）');
   assert.match(open[0].text, /3\s*笔/, '必须写出欠账笔数：' + open[0].text);

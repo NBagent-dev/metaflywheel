@@ -42,12 +42,29 @@ test('③★未处置必须可见 —— 这是"对源负责"的核心，缺了�
 });
 
 test('④同一条命中只处置一次（不许批量"洗白"）', () => {
+  // ★P574：桩改用【不同 key】造两条 —— 因为同一个 key 在未处置期间的连续命中
+  //   现在会被合并成一条（那是同一件事被踩了两次，不是两笔欠账）。
+  //   而本判据考的是 `disposeHit` 会不会一次洗白【多笔】—— 所以要用真的两笔。
   let l = [];
-  l = recordHit(l, H(1000, 'K', 't1', 'hint')).list;
-  l = recordHit(l, H(2000, 'K', 't2', 'ask')).list;
-  const r = disposeHit(l, 'K', '处置了最新那条');
-  assert.equal(r.disposed.length, 1, '按 key 处置只应命中一条（从最新往前）');
-  assert.equal(openHits(r.list).length, 1, '剩一条仍未处置');
+  l = recordHit(l, H(1000, 'A', 't1', 'hint')).list;
+  l = recordHit(l, H(2000, 'B', 't2', 'ask')).list;
+  const r = disposeHit(l, 'A', '处置了最新那条');
+  assert.equal(r.disposed.length, 1, '按 key 处置只应命中一条');
+  assert.equal(openHits(r.list).length, 1, '剩 B 仍未处置');
+});
+
+test('④b ★P574：同一 key 未处置期间的连续注入【合并成一条】，处置之后才记新的一条', () => {
+  // 这条守的是 P574 本身：它是"提醒次数"与"欠账笔数"能分开的前提。
+  let l = [];
+  l = recordHit(l, H(1000, 'K', 't', 'hint')).list;
+  l = recordHit(l, H(2000, 'K', 't', 'hint')).list;
+  l = recordHit(l, H(3000, 'K', 't', 'hint')).list;
+  assert.equal(l.length, 1, '未处置期间三次注入 ⇒ 只有一条');
+  assert.equal(l[0].count, 3, '而 count=3 记住了"被提醒三次"');
+  l = disposeHit(l, 'K', '处置了').list;
+  assert.equal(l.length, 1, '处置之后仍然只有一条（处置不新增记录）');
+  l = recordHit(l, H(4000, 'K', 't', 'hint')).list;
+  assert.equal(l.length, 2, '处置之后再命中 ⇒ 那是新的一次背离，该记第二条');
 });
 
 test('⑤负控：没有命中记录 ⇒ 快照那一行必须为空（不许凭空说"命中过"）', () => {

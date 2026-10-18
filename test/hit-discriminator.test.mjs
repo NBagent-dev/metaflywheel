@@ -23,11 +23,15 @@ import { recordHit, disposeHit, outstandingHits } from '../engine/modules/hits.m
 const KEY = '项目定位';
 const mk = (key, at) => ({ key, tool: 't', verdict: 'hint', text: '他在类似事情上说过什么', at });
 
-/** 造 n 条已处置的命中（无 stillOpen）。 */
+/** 造 n 条已处置的命中（无 stillOpen）。
+ *  ★P574：处置要遍历【它实际拿到的每一条】，而不是假设"造 n 条就有 n 条"。
+ *    因为 `recordHit` 现在会把【同一 key 未处置期间的连续注入】合并成一条 `count: n`
+ *    ⇒ 造 28 次可能只得到 1 条。而"处置一次就够"在语义上正是对的：
+ *    同一句话被注入 28 次，欠的仍然是**一次处置**。 */
 function disposedAll(n, startAt) {
   let l = [];
   for (let i = 0; i < n; i++) l = recordHit(l, mk(KEY, (startAt || 1000) + i)).list;
-  for (let i = 0; i < n; i++) l = disposeHit(l, l[i].id, '处置' + i).list;
+  for (const h of l.slice()) l = disposeHit(l, h.id, '处置了').list;
   return l;
 }
 const stateOf = (hits) => ({ hits, unknowns: [], sediments: [] });
@@ -48,9 +52,12 @@ test('②正例：存在【未处置】的命中 ⇒ 必须产出，且文本要
 });
 
 test('③正例：全部已处置，但其中一条标了 stillOpen=true ⇒ 必须产出', () => {
-  let l = disposedAll(3);
-  // 最后一条处置时勾选"仍未解决"
-  l[2] = Object.assign({}, l[2], { stillOpen: true });
+  const l = disposedAll(3);
+  // ★P574：用【它实际拿到的最后一条】，而不是硬编码的下标 ——
+  //   因为 `recordHit` 现在会把同 key 的连续注入合并，3 次可能只得到 1 条。
+  assert.ok(l.length >= 1, '桩必须至少产出一条');
+  const last = l.length - 1;
+  l[last] = Object.assign({}, l[last], { stillOpen: true });
   const r = repeats(stateOf(l));
   assert.equal(r.length, 1, '全部已处置但标了 stillOpen ⇒ 仍是欠账，必须产出');
 });

@@ -46,6 +46,37 @@ export function recordHit(list, hit) {
   if (!rec) return { list: arr, entry: null };
   // 同一时刻同一 key 同一工具只记一次（防重复计数污染）
   if (arr.some(function (e) { return e && e.id === rec.id; })) return { list: arr, entry: null };
+
+  // ★P574：同一 key 在【上一次处置之前】只保留一条 —— 因为第二条不携带新信息。
+  //
+  //   缺口的形状（2026-10-18 实测）：principal 的两条（「愿景」「项目定位」）每次提示都注入
+  //     ⇒ 每次注入都记一条 hit。23 分钟里记了 18 条，**原文完全相同**，
+  //     而每一条都要求逐条写"我怎么处置" ⇒ 账本报「你有 18 笔债没还」，
+  //     而实际欠的是**一次处置**，不是一个阵列。
+  //
+  //   ★ 判断依据：如果那是 18 次真实的背离，18 次处置【应该各不相同】；而它们全一样
+  //     ⇒ 全一样的东西不可能是 18 件事。**一个数在说 A，其实在说 B。**
+  //
+  //   规则：同一 key 若【最近一条尚未处置】⇒ 不新增，只把它的 `count` 加一。
+  //     而【处置之后】再命中才记新的一条 —— 那才是新的一次背离。
+  //   ⇒ 这样"未处置"的数量等于【真正欠着的处置数】，而不是注入频率。
+  const lastOpen = (function () {
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const e = arr[i];
+      if (!e || e.key !== rec.key) continue;
+      if (!e.disposedAt) return e;      // 该 key 最近一条未处置 ⇒ 合并进它
+      return null;                      // 最近一条已处置 ⇒ 这是新的一次，该记
+    }
+    return null;
+  })();
+  if (lastOpen) {
+    lastOpen.count = (typeof lastOpen.count === 'number' ? lastOpen.count : 1) + 1;
+    lastOpen.lastAt = rec.at;
+    return { list: arr, entry: null, merged: lastOpen };
+  }
+
+  rec.count = 1;
+  rec.lastAt = rec.at;
   arr.push(rec);
   return { list: arr.length > HIT_MAX ? arr.slice(-HIT_MAX) : arr, entry: rec };
 }
