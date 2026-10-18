@@ -17,7 +17,7 @@ import { throttleMsOf } from "./modules/rhythm.mjs";
 import { normalizeRules, decide, hintFor, hintLine } from "./modules/preaction.mjs";
 import { consultPrincipal } from "./modules/principal.mjs";   // ★P517②：把"源"接到动作上
 import { consultUnknowns } from "./modules/unknowns.mjs";     // ★P517③：未核清单（只提示，永不拦）
-import { recordHit } from "./modules/hits.mjs";                // ★P519：回流（命中即留痕）
+import { recordHit, isLedgerTool } from "./modules/hits.mjs";                // ★P519：回流（命中即留痕）· ★P546：登记类工具豁免
 import { fmtProblem as fmtProblemCore, buildSnapshot, directiveText as directiveTextCore } from "./modules/core.mjs";
 import { VALENCE_TAU_MS, valenceRecord as valenceRecordCore, valenceSummaryLine as valenceSummaryLineCore } from "./modules/valence.mjs";
 import { makeBoundaryGuard } from "./modules/guard.mjs";
@@ -340,7 +340,17 @@ export function apply(ctx) {
       //   排除元工具：录入/查看 principal 自身的调用不该被自己的条目拦（否则自我缠绕）。
       try {
         const tn = String((exec && exec.name) || '');
-        if (tn !== 'mpm_principal' && tn !== 'mpm_flywheel_state' && tn !== 'mpm_hit' && tn !== 'mpm_unknown') {
+        // ★★P546 修：**登记类工具全部豁免**（旧实现是 4 个具体工具名的白名单）。
+        //   实测：45 笔命中里 **29 笔（64.4%）来自 mpm_\* 工具** ⇒ 而清账动作本身也在其中，
+        //   造成死循环：每清一笔它又记一笔（时间戳精确对应：13:49:24 被 13:49:47 清，
+        //   而 13:49:47 的那次调用又产生新的一笔）⇒ **未处置永远 ≥ 1** ⇒ hit-open 永久占一个议程名额。
+        //   旧白名单（mpm_principal/flywheel_state/hit/unknown）的意图是"登记类调用不算"，
+        //   但实现只覆盖了当时代码里的 4 个 ⇒ 之后新增的 micro/solve/converge/deposit/frame/generate/narrate 全部漏网。
+        //   ★同源依据（P004-M3）：**C 计价的监听器早已对 `mpm_*` 前缀豁免**——"登记类调用本身
+        //   不计入被登记问题的求解成本"；而命中记录没跟上。现在统一为前缀判断（isLedgerTool）。
+        //   ★为什么这里跳过的是【整个检索块】而不只是"记录"：登记类工具不是我对外做的一次动作，
+        //   consultPrincipal 对它没有意义，且会造成自我缠绕。
+        if (!isLedgerTool(tn)) {
           const subj = tn + ' ' + JSON.stringify((exec && exec.arguments) || {});
           const pc = consultPrincipal(state.principal, subj);
           // ★P519 回流：**命中即留痕**（先记，再决定拦不拦）。记的是事实：哪条命中、什么判决、什么动作触发；
