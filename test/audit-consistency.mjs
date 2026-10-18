@@ -49,11 +49,19 @@ try {
   realPass = parseInt(((out.match(/(?:#|ℹ)\s*pass (\d+)/) || [])[1] || '-1'), 10);
   realTotal = parseInt(((out.match(/(?:#|ℹ)\s*tests (\d+)/) || [])[1] || '-1'), 10);
 }
-// ★★ 修：抓不到就必须报错，不许沉默跳过
-if (realPass < 0 || realTotal < 0) {
+// ★★ 抓不到就必须报错，不许沉默跳过（P474-M396：检查器必须自带"自证会红"）
+//   ★ 而有一个例外：本脚本自己是一条判据（test/consistency.test.mjs），
+//     判据运行时会设 SKIP_TEST_COUNT=1 来避免无限递归（详见该文件头注释）。
+//   ⇒ 而在 SKIP 模式下，数字断言整段失效 —— **这个代价必须被明说**，
+//     否则它会看起来"全绿"，而实际上有一类检查被静默跳过了（那正是假通过）。
+if (process.env.SKIP_TEST_COUNT === '1') {
+  console.log('  （SKIP_TEST_COUNT=1 ⇒ 数字断言本章节跳过：本脚本正被 npm test 调用，避免递归）');
+  realPass = -1;
+  realTotal = -1;
+} else if (realPass < 0 || realTotal < 0) {
   say('BAD', '★ 对账器自己失败：抓不到测试计数（pass=' + realPass + ' tests=' + realTotal + '）—— 而它会因此假通过');
 }
-console.log('  真实：pass=' + realPass + ' / tests=' + realTotal);
+if (realPass > 0) console.log('  真实：pass=' + realPass + ' / tests=' + realTotal);
 for (const f of mds) {
   for (const mm of read(f).matchAll(/(\d{2,4})\s*\/\s*(\d{2,4})/g)) {
     const a = parseInt(mm[1], 10), b = parseInt(mm[2], 10);
