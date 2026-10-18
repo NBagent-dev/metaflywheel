@@ -1,10 +1,18 @@
 // P559 · 从账本生成 docs/ledger.md —— 编号索引
 // ★ 为什么不手写：469 条沉积手写必然过期；而生成器【永远与账本同步】。
 //   （与 P507-M425 同一个理由：手写清单会漏，发现出来的不会。）
+//
+// ★ P582：输出路径可参数化 —— 而这不是为了灵活，是为了让【新鲜度判据】能存在。
+//   检查新鲜度的判据必须生成到别处再比对；如果它顺手重写检查对象，
+//   那它检查的就是"它自己刚写的东西"，永远绿。**那是一个恒绿陷阱。**
+//   用法：node test/gen-ledger-doc.mjs [输出路径]
+//         MPM_LEDGER=<path> 覆盖账本路径
 import fs from 'node:fs';
 
-const LEDGER = 'C:/Users/Administrator/Desktop/daima/XIN/.mpm/flywheel.json';
-const OUT = 'C:/Users/Administrator/Desktop/daima/XIN/metaflywheel/docs/ledger.md';
+const LEDGER = process.env.MPM_LEDGER
+  || 'C:/Users/Administrator/Desktop/daima/XIN/.mpm/flywheel.json';
+const OUT = process.argv[2]
+  || 'C:/Users/Administrator/Desktop/daima/XIN/metaflywheel/docs/ledger.md';
 
 const st = JSON.parse(fs.readFileSync(LEDGER, 'utf8'));
 const seds = (st.sediments || []).filter(s => s && s.id);
