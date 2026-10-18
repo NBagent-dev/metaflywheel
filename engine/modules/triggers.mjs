@@ -77,3 +77,60 @@ export function validateTriggers(triggers) {
   }
   return errs;
 }
+
+/**
+ * 把工具返回（或宿主 result）里的文本拼出来。
+ * ★ 只取 {type:'text'} 项——别把结构化字段塞进正则。
+ * ★★ 而非文本项要【滤掉】不是填空串：函数名叫 collectText，就该"只收集文本"。
+ *    （填 '' 再 join 会留下空行——那是"按位置对齐"，不是"收集"。两者对匹配都无害，
+ *      但名字与行为不一致会让下一个人误判。判据 ⑨ 就是用它抓出这一点的。）
+ */
+export function collectText(result) {
+  const c = result && result.content;
+  if (!Array.isArray(c)) return '';
+  return c
+    .map(function (x) { return (x && typeof x.text === 'string') ? x.text : null; })
+    .filter(function (x) { return x !== null; })
+    .join('\n');
+}
+
+/**
+ * ★工具失败 → 动作名。
+ *
+ * ★ 这里用正则匹配文本，**与 P556-M468 的"字面匹配不可靠"不冲突**：
+ *   那条说的是"用字面相似去检索【相关沉积】"不可靠（语义相似度做不到）；
+ *   而这里判断的是【这次调用是否失败】——**失败标记是结构化的**
+ *   （`[exit code: N]` 是硬标记；`has not been read` / `不存在` 是固定短语），
+ *   不是语义相似度。
+ *
+ * ★ 顺序很重要：先特判（edit-blocked / id-guess），再一般（path-guess），最后 exit code。
+ *   因为一笔 edit 失败可能同时命中"not found"，而 edit-blocked 更精确。
+ *
+ * ★ 返回 null 表示"认不出" —— **绝不许硬套一个动作名**（否则会注入无关纪律）。
+ */
+export function failureToAction(toolName, text) {
+  const t = String(text == null ? '' : text);
+  const tn = String(toolName == null ? '' : toolName);
+
+  // ① edit 被读守卫拒（P027-M17 那条纪律治的正是它）
+  if (/has not been read|file has not been read/i.test(t)) return 'edit-blocked';
+
+  // ② 猜了不存在的沉积 ID（引擎的拒绝语）
+  if (/不存在的沉积 ID|已拒绝/.test(t) && /沉积/.test(t)) return 'id-guess';
+
+  // ③ 猜了路径：读/找失败
+  if (/not found|cannot read|does not exist|路径不存在|找不到.*文件/i.test(t)) return 'path-guess';
+
+  // ④ shell 非零退出（★ 只认非零；0 是成功）
+  //   ★ 而且【只有 shell 类工具】才认 —— 否则别的工具输出里偶然出现 "[exit code:" 字样就会误报
+  //   （判断放在这里而不是调用方：本函数是"从工具输出推断动作"的拥有者，拆成两处会各自漏判）
+  if (isShellTool(tn) && /\[exit code:\s*[1-9]\d*\]/i.test(t)) return 'pwsh-inline-fail';
+
+  return null;
+}
+
+/** 只在"这个工具可能是 shell"时才认 exit code —— 防止 edit 返回里偶然出现 exit code 字样 */
+export function isShellTool(toolName) {
+  return /^(pwsh|bash|sh|shell|powershell|cmd)$/i.test(String(toolName == null ? '' : toolName));
+}
+

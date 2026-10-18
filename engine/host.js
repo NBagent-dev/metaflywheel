@@ -18,6 +18,7 @@ import { normalizeRules, decide, hintFor, hintLine } from "./modules/preaction.m
 import { consultPrincipal } from "./modules/principal.mjs";   // ★P517②：把"源"接到动作上
 import { consultUnknowns } from "./modules/unknowns.mjs";     // ★P517③：未核清单（只提示，永不拦）
 import { recordHit, isLedgerTool } from "./modules/hits.mjs";                // ★P519：回流（命中即留痕）· ★P546：登记类工具豁免
+import { lookUp, renderTrigger, failureToAction, isShellTool, loadTriggers, collectText } from "./modules/triggers.mjs"; // ★P543：动作级触发器（纪律在动作失败时出现）
 import { fmtProblem as fmtProblemCore, buildSnapshot, directiveText as directiveTextCore } from "./modules/core.mjs";
 import { VALENCE_TAU_MS, valenceRecord as valenceRecordCore, valenceSummaryLine as valenceSummaryLineCore } from "./modules/valence.mjs";
 import { makeBoundaryGuard } from "./modules/guard.mjs";
@@ -376,22 +377,51 @@ export function apply(ctx) {
       try { return await next(); } catch (e2) { return { kind: 'allow' }; }
     }
   });
+  // ★★P543：**动作级触发器** —— 纪律性知识不在开工前出现，在【那个动作失败的那一刻】出现。
+  //   理由（P543-M469）：纪律性知识描述的是"我正在做的事的每一步"，所以**在结构上永远不会
+  //   被"开始前检索"命中**。而 `tools/post-execute` 正是"那个动作刚刚发生完"的那一刻。
+  //   ★ 索引键是【动作】（edit-blocked / pwsh-inline-fail / path-guess / id-guess），不是主题——
+  //     因为 P556-M468 证明字面相似检索抓不到结构相关的东西。
+  //   ★ 判据（PR-007 集成验收）：那个纪律必须是它【原本不知道的】；若早就知道，这次提醒没有价值。
+  let triggersCache = null;
+  function getTriggers() {
+    if (triggersCache !== null) return triggersCache;
+    try {
+      const base = String((root && root.current) || '').replace(/\\/g, '/');
+      triggersCache = base ? loadTriggers(base + '/.mpm/triggers.json') : [];
+    } catch (e) { triggersCache = []; }   // 加载失败不得影响工具链（P484 保险丝）
+    return triggersCache;
+  }
+
   ctx.on('tools/post-execute', async function (exec, result, next) {
     try {
       if (preOff()) return await next();
       const hint = hintFor(await preRulesNow(), { tool: exec && exec.name, args: exec && exec.arguments });
-      if (!hint) return await next();
+
+      // ★P543 失败通道：判"这次调用失败了吗"，认出动作名后查纪律。
+      //   ★ 认不出就返回 null（**绝不硬套一个动作名**——那会注入无关纪律）。
+      let tf = failureToAction(exec && exec.name, collectText(result));
+      // exit code 只对 shell 类工具成立（防止别的工具输出里偶然出现 "[exit code:" 字样）
+      if (tf === 'pwsh-inline-fail' && !isShellTool(exec && exec.name)) tf = null;
+      const trig = tf ? lookUp(getTriggers(), tf) : { found: false, list: [] };
+
+      // ★ 两条通道都空 ⇒ 直接走（沉默是对的：动作成功时不需要提醒，否则提示会变噪声）
+      if (!hint && !trig.found) return await next();
+
       const out = await next();
       const base = (out && out.kind === 'accept') ? out : { kind: 'accept' };
       const content = Array.isArray(base.content) ? base.content.slice()
         : (Array.isArray(result && result.content) ? result.content.slice() : []);
-      content.push({ type: 'text', text: '\n' + hintLine(hint) });
+      if (hint) content.push({ type: 'text', text: '\n' + hintLine(hint) });
+      if (trig.found) content.push({ type: 'text', text: '\n' + renderTrigger(tf, trig) });
       return Object.assign({}, base, { kind: 'accept', content: content });
     } catch (e) {
       state.preAction.injectFail += 1;
       try { return await next(); } catch (e2) { return { kind: 'accept' }; }
     }
   });
+  // ★ 注意：不再在本文件里内联一个"拼文本"的小函数 —— 那会与模块里的 `collectText`
+  //   成为同一件事的两份实现（P519 的双计就是这一类病）。用 import 的那个。
   const patrolFn = makePatrol({
     state: state, isParked: isParked, isOpen: isOpen,
     ensureLoaded: ensureLoaded, snapshot: snapshot, persist: persist, deliberate: deliberate,
