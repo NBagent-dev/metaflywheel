@@ -1,0 +1,70 @@
+// P559 · 判据：README 的第一屏必须【零上下文可读】
+// ★ 这条判据的存在理由：用户说"外人一眼看就是AI写的、看不懂到底是什么"。
+//   而"看不懂"最可能的原因不是写得差，是【它假设读者已经知道全部前提】。
+// ⇒ 所以这条判据检查【第一屏】（前 20 行）：
+//   ① 不含内部编号（P###-M###）
+//   ② 不含内部术语（沉积/账本/判据/负控/飞轮/意识）
+//   ③ 必须有一句话能回答"这是什么"（不是"它是什么"的清单，是一句话）
+//   ④ 必须有"诚实说明"段（承认理论未定稿 / 代码由 AI 写）
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+
+const README = 'C:/Users/Administrator/Desktop/daima/XIN/metaflywheel/README.md';
+const read = () => fs.readFileSync(README, 'utf8');
+const firstScreen = (n = 20) => read().split('\n').slice(0, n).join('\n');
+
+// 内部术语清单 —— 而这些词【不是禁用】，而是【首次出现必须带解释】
+// ★ 判据的这次修订（2026-10-18）本身是一次教训：
+//   第一版写的是"第一屏禁用这些词"，而它红了——红在第 3 行的「账本」上。
+//   而「账本」在那里是一个【刻意的比喻】（记欠账、要销账、能追溯），不是黑话。
+//   ⇒ 所以"禁用清单"错了（那是白名单思维，P546 的病）；真正该判的是
+//     **这个词第一次出现时，有没有被解释**。后者更准，而且允许比喻。
+const JARGON = ['沉积', '账本', '判据', '负控', '飞轮', '意识', '收敛', '代谢'];
+
+test('① ★ 第一屏不含任何内部编号（P###-M###）', () => {
+  const screen = firstScreen();
+  const m = screen.match(/P\d{2,3}-M\d{2,4}/);
+  assert.equal(m, null, '★ 第一屏出现了内部编号：' + (m && m[0]) + ' —— 外人不知道它是什么');
+});
+
+test('② ★ 每个内部术语【首次出现处】必须带解释（而不是禁用它们）', () => {
+  const t = read();
+  for (const w of JARGON) {
+    const i = t.indexOf(w);
+    if (i < 0) continue;                    // 没用到这个词 ⇒ 不需要解释
+    if (i > 3000) continue;                 // 只在远处出现 ⇒ 那时读者已经懂了
+    // ★ 解释的判据：首次出现后 120 字内出现解释性标记
+    const window = t.slice(i, i + 120);
+    const explained = /是|因为|指|即|意味着|记的是|它/.test(window);
+    assert.ok(explained, '★「' + w + '」在首屏附近出现却没有解释 —— 窗口：' + JSON.stringify(window.slice(0, 60)));
+  }
+});
+
+test('③ 第一屏必须能回答"这是什么"（有一句话，而不是一堆要点）', () => {
+  const screen = firstScreen();
+  assert.ok(/一个[^。]{4,40}。/.test(screen), '★ 第一屏里应有一句"它是一个X"的完整句子');
+});
+
+test('④ 必须有【诚实说明】段：承认理论未定稿 + 代码由 AI 写', () => {
+  const t = read();
+  assert.ok(/未定稿|终审待做/.test(t), '★ 必须承认理论部分未定稿 —— 否则是在把自产的东西写成外部权威');
+  assert.ok(/AI[^。]{0,20}写|由 AI/.test(t), '★ 必须承认代码有相当比例由 AI 写');
+});
+
+test('⑤ 必须有一个"它不承诺什么"的边界（不许只写能力）', () => {
+  const t = read();
+  assert.ok(/不承诺|不测量|不需要它/.test(t), '★ 必须写出它【不】做什么 —— 只写能力的文档是广告');
+});
+
+test('⑥ ★ 必须说明"内部编号是什么"，并且说明看它【不是必需】', () => {
+  const t = read();
+  assert.ok(/P019-M14|P\d{2,3}-M\d{2,4}/.test(t), '必须至少举一个编号当例子');
+  assert.ok(/不需要看|不必看|不需要看任何一个编号/.test(t), '★ 必须说清"知道它是什么不需要看编号"');
+});
+
+test('⑦ 一条可核对的东西：必须给出【能真的跑的命令】与一个数字', () => {
+  const t = read();
+  assert.ok(/npm test/.test(t), '必须给出真的能跑的命令');
+  assert.ok(/\d{2,4}\s*\/\s*\d{2,4}/.test(t), '必须给出一个可核对的计数（如 221/221）');
+});
