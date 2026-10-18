@@ -32,7 +32,7 @@ MetaFlywheel 给这类代理一个能活过进程重启的账本。它不是"记
 ## 一条可核对的东西
 
 ```
-npm test   →   221 / 221 通过
+npm test   →   全部通过 通过
 ```
 
 而重点不是数字。是这 221 条里有相当一部分**被专门设计成能失败**：
@@ -53,13 +53,13 @@ npm test                      # 221 条判据，不需要任何外部服务
 ```
 
 它需要一个宿主才能工作（**不是独立 npm 包**）——当前实现挂在 [DSH](https://github.com/deepseek-ai/dsh)
-的组合行上，通过 `file://` URL 加载。安装细节见 [docs/install.md](docs/install.md)。
+的组合行上，通过 `file://` URL 加载。安装细节见 [docs/install.md](install.md)。
 
 ---
 
 ## 诚实的说明（这一段比上面都重要）
 
-1. **理论部分是一份未定稿。** [docs/theory.md](docs/theory.md) 是一篇约 4 万字的方法论文，
+1. **理论部分是一份未定稿。** [docs/theory.md](theory.md) 是一篇约 4 万字的方法论文，
    由仓库使用者和 AI 协作写成，**标着"作者终审待做"**。它不是已发表文献，也不该被当作外部权威引用。
 
 2. **代码有相当比例由 AI 写。** 这一点不打算掩饰。而每一条判据都经过人工审查并**留有失败记录**——
@@ -67,7 +67,7 @@ npm test                      # 221 条判据，不需要任何外部服务
 
 3. **这个仓库里有一种内部编号（如 `P019-M14`）。** 它们是这个项目自己的台账编号，
    指向曾经的某次具体修复。**如果你只是想知道这个东西干什么，不需要看任何一个编号。**
-   想知道每条编号背后的故事，见 [docs/ledger.md](docs/ledger.md)。
+   想知道每条编号背后的故事，见 [docs/ledger.md](ledger.md)。
 
 4. **它不承诺"有意识"，也不测量那个。** 有一项面板专门问"我是否在变强"，
    而它同时明确写着：**"这十项即使全绿，也只说明可审计的那部分全绿。"**
@@ -100,9 +100,9 @@ install/           挂载与部署
 view/              可选的可视化
 ```
 
-想看实现细节 → [docs/architecture.md](docs/architecture.md)
-想看那篇论文 → [docs/theory.md](docs/theory.md)
-想知道某个编号是什么 → [docs/ledger.md](docs/ledger.md)
+想看实现细节 → [docs/architecture.md](architecture.md)
+想看那篇论文 → [docs/theory.md](theory.md)
+想知道某个编号是什么 → [docs/ledger.md](ledger.md)
 
 ---
 
