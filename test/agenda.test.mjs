@@ -55,12 +55,34 @@ test('③反复命中：同一 key ≥' + HIT_REPEAT_MIN + ' 次【且仍有欠�
 
 test('④零引用沉积：>=' + STALE_DEPOSIT_DAYS + ' 天才提；新的不提（负控）', () => {
   const now = 100 * DAY;
-  const fresh = { sediments: [{ id: 'M1', at: now - 2 * DAY, cites: 0 }] };
+  // ★★P539：夹具必须用【真实字段名 depositedAt】。旧夹具用的是 `at`——**我假设的字段名**——
+  //   于是判据绿、功能死：真实账本 455 条沉积【0 条有 at】⇒ 全部被 `!at` 跳过 ⇒
+  //   **sediment-stale 从上线起从未产出过一条**（实测够格 257 条，产出 0 条）。
+  const fresh = { sediments: [{ id: 'M1', depositedAt: now - 2 * DAY, cites: 0 }] };
   assert.equal(innerAgenda(fresh, now).length, 0, '刚写的沉积不许被当成"没人用"');
-  const stale = { sediments: [{ id: 'M1', at: now - 20 * DAY, cites: 0 }] };
+  const stale = { sediments: [{ id: 'M1', depositedAt: now - 20 * DAY, cites: 0 }] };
   assert.equal(innerAgenda(stale, now).length, 1);
-  const cited = { sediments: [{ id: 'M1', at: now - 20 * DAY, cites: 3 }] };
+  const cited = { sediments: [{ id: 'M1', depositedAt: now - 20 * DAY, cites: 3 }] };
   assert.equal(innerAgenda(cited, now).length, 0, '被引用过的沉积不算零引用');
+  // 兼容旧字段（升级迁移期）
+  const legacy = { sediments: [{ id: 'M1', at: now - 20 * DAY, cites: 0 }] };
+  assert.equal(innerAgenda(legacy, now).length, 1, '兼容旧字段 at');
+});
+
+test('④b★形状回归：字段名必须与【真实账本】一致——否则判据绿而功能死', () => {
+  // 这条不测逻辑，测【契约】：读真实账本的一条记录，断言它具备 innerAgenda 需要的形状。
+  // 价值：将来若有人改了落盘字段名而没改 agenda，这条会红 —— 而不是让功能静默失效。
+  const ROOT = 'C:/Users/Administrator/Desktop/daima/XIN/.mpm/flywheel.json';
+  if (!fs.existsSync(ROOT)) return;                 // 别的机器上跳过（不制造假红）
+  const st = JSON.parse(fs.readFileSync(ROOT, 'utf8'));
+  const s = (st.sediments || [])[0];
+  assert.ok(s, '真实账本应有沉积');
+  assert.equal(typeof s.depositedAt, 'number',
+    '★真实沉积记录的字段名必须是 depositedAt —— 若它变了，sediment-stale 会静默失效');
+  const now = Date.now();
+  const probe = { sediments: [{ id: s.id, depositedAt: now - 30 * DAY, cites: 0 }] };
+  assert.equal(innerAgenda(probe, now).filter(i => i.kind === 'sediment-stale').length, 1,
+    '★用真实字段形状造的"30 天零引用"沉积，必须产出 sediment-stale（否则字段契约断了）');
 });
 
 test('⑤★负控：账本干净 ⇒ **一条都不许提**（不许为了显得"自发"而造题）', () => {

@@ -101,7 +101,13 @@ export function innerAgenda(state, now) {
   for (const s of seds) {
     if (!s) continue;
     const cites = (typeof s.cites === 'number') ? s.cites : 0;
-    const at = (typeof s.at === 'number') ? s.at : 0;
+    // ★★P539 修：真实沉积记录的字段是 `depositedAt`（实测 455/455 条有它、【0 条】有 `at`）。
+    //   旧代码只读 `s.at` ⇒ 恒为 0 ⇒ 下面的 `!at` 把 **455 条全部跳过** ⇒
+    //   **sediment-stale 这个来源从上线起从未产出过任何一条**（实测：够格 257 条，产出 0 条）。
+    //   ⇒ 教训：判据的夹具用了 `at`（**我假设的字段名**），于是**判据绿、功能死**——
+    //     判据与真实数据不同构，比"判据恒真"更隐蔽（它看起来真的在测东西）。
+    const at = (typeof s.depositedAt === 'number') ? s.depositedAt
+      : (typeof s.at === 'number') ? s.at : 0;
     if (cites > 0 || !at) continue;
     if (t - at < STALE_DEPOSIT_DAYS * day()) continue;   // 负控：没到 14 天不提
     out.push({
