@@ -17,14 +17,18 @@ const DATA = 'C:/Users/Administrator/Desktop/daima/XIN/.mpm/unforeseen.json';
 const load = () => JSON.parse(fs.readFileSync(DATA, 'utf8'));
 const mk = (cat, isOld) => ({ at: 1, what: 'x', category: cat, isOldType: isOld });
 
-test('① 真实数据：13 条、7 类，且类型按首次出现顺序排列', () => {
+test('① 真实数据：至少 13 条、至少 7 类，且类型顺序的前两个固定', () => {
   const d = load();
   assert.ok(Array.isArray(d.entries), 'unforeseen.json 必须有 entries');
   const t = typeLedger(d.entries);
-  assert.equal(t.total, 13, '★ 13 条真实样本（今天实际发生的，不是编的）');
-  assert.equal(t.categoryCount, 7, '★ 7 类');
-  assert.ok(t.categories.length === 7);
-  // 首次出现顺序必须稳定（顺序本身携带信息：先长出来的是什么）
+  // ★★ 修（2026-10-18）：原来写的是 `assert.equal(t.total, 13)` —— 那断言的是【当时的快照】，
+  //   而类型账的样本【必然增长】⇒ 这个判据必然过期（它刚在 13→15 时红了一次）。
+  //   ⇒ 判据里该放的是【不变量】或【阈值】，不是【某一刻的计数值】。
+  //   （与 P550-M463「分界点必须是那件事的时刻，不是今天」同一种形状：
+  //    判据里放了一个只对当前时刻成立的东西。）
+  assert.ok(t.total >= 13, '至少 13 条真实样本（样本会增长，不许断言 == 快照）');
+  assert.ok(t.categoryCount >= 7, '至少 7 类');
+  // ★ 而"前两个类别"是真正的不变量：它记录的是【历史顺序】，那不该变
   assert.equal(t.categories[0], '字段名假设');
   assert.equal(t.categories[1], '路径形态假设');
 });
