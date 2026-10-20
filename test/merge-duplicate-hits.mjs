@@ -1,5 +1,12 @@
 // 一次性清理：把「同一 key 的重复未处置命中」合并成一条
 //
+// ★★★ **必须在引擎停止时运行** —— 而这是 2026-10-18 用一次失败换来的：
+//   第一次跑这个脚本时引擎在运行，它报了「22 → 2」，写了盘，**而十分钟后就被覆盖了**。
+//   原因：引擎在内存里持有整个账本，每次 persist 都是【整份写回磁盘】。
+//   ⇒ **账本只有一个作者，就是引擎自己。**
+//   ⇒ 任何外部修改要么【通过引擎的接口】（`mpm_hit dispose`），
+//     要么【在引擎停止时做】（重启窗口里，启动之前）。
+//
 // ★ 为什么需要它（2026-10-18）：
 //   P574 的修法（`recordHit` 同 key 合并）**还没生效**（引擎要重启），
 //   而在此之前，principal 的每次注入都在记一条新的未处置命中。
@@ -15,8 +22,9 @@
 //   同一句 principal 被注入 23 次，欠的仍然是**一次处置**。
 //   而把 23 条都留着，会让账本每一轮都说"你欠 23 笔" —— **那是假的**。
 //
-// 用法：node test/merge-duplicate-hits.mjs [--apply]
-//   不带 --apply ⇒ 只报告（dry run）
+// 用法（**先确认引擎已停止**）：
+//   node test/merge-duplicate-hits.mjs           # dry run，只报告
+//   node test/merge-duplicate-hits.mjs --apply   # 写回（先备份）
 import fs from 'node:fs';
 
 const APPLY = process.argv.includes('--apply');

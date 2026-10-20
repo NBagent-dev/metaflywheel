@@ -235,6 +235,16 @@ function badArg(args, toolName) {
   return '';
 }
 
+// ★★ 契约警告（2026-10-20，来自 issue #1 的实测）：
+//   本函数产出的 `parameters` 是【DSH 的 spec 格式】——属性内 `required: true`。
+//   `defineTool` 会用 `parameterSchemaSpecToJsonSchema` 把它提升成标准 JSON Schema：
+//     { type:'object', properties:{...}, required:['title', ...] }
+//   ⇒ **不要**在这里改写成标准 JSON Schema！
+//     实测：直接喂 {type:'object', properties, required:[...]} 会被拒绝：
+//       unsupported JSON schema: parameters.type must be a value schema object
+//   ⇒ 而"属性内 required 未被提升/parameters 扁平"这类现象【不来自本函数】——
+//     它是 DSH→网关→Gemini 那条转换链的问题，不是插件的问题。
+//   判据在 test/tool-schema.test.mjs 里守着这条契约。
 function mkTool(name2, description, parameters, required, execute) {
   const flat = {};
   const props = (parameters && parameters.properties) || {};

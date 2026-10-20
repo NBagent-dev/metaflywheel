@@ -75,6 +75,33 @@ AI 助手每次对话从零开始。你昨天纠正过的错，今天它还会�
 - **不承诺改善模型能力。** 它不训练、不微调、不改变任何一个权重。
 - **不承诺对每个人都合适。** 如果需求是"让 AI 记住更多东西"，用向量库即可，不需要这个项目。
 
+## 已知问题
+
+### 用 Gemini 系模型（经网关）会 400
+
+**症状**：请求被上游拒绝，错误里有一串 schema 校验失败，例如
+
+```
+'...function_declarations[0].parameters.properties[0].value.required' (TYPE_STRING), true
+'...function_declarations[0].parameters' (title), Starting an object on a scalar field
+```
+
+**根因不在本插件。** 三条可复跑的证据（`test/tool-schema.test.mjs` 里也有）：
+
+| 做法 | 结果 |
+| --- | --- |
+| 本插件现在的写法（属性内 `required: true`） | ✓ 被 `defineTool` 接受，产出标准 JSON Schema：`{"type":"object","properties":{...},"required":[...]}` |
+| 直接喂标准 JSON Schema（`{type:'object', properties, required:[...]}`） | ✗ 被拒绝：`unsupported JSON schema: parameters.type must be a value schema object` |
+| 扁平属性字典 | ✓ 接受，但 `required` 丢失 |
+
+**⇒ 本插件产出的 schema 已经是标准的，所以 400 不是它造成的。** 报错里 `required: true` 出现在属性内部，而 `defineTool` 的输出不会这样（它会把 `required` 提到根级）——说明发出去的那份不是本插件的产物。**问题在宿主 → 网关 → Gemini 这条转换链上。**
+
+**⇒ 而"改成标准 JSON Schema"这个看起来对的修法会让插件加载失败**（第二行）。所以不要那样改。
+
+**临时绕过**：换用 DeepSeek 或其他 OpenAI 兼容模型。
+
+**如果这个插件曾经在你这里跑通过 Gemini**，请把宿主版本与网关类型写进 [issue #1](https://github.com/NBagent-dev/metaflywheel/issues/1)——那能把这条从"证据指向"变成"已定位"。
+
 ## 快速开始
 
 ```bash
