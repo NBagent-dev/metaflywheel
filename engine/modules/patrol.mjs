@@ -95,6 +95,12 @@ export function makePatrol(p) {
       for (let i = 0; i < ids.length; i++) {
         const p = state.problems[ids[i]];
         if (isParked(p) || isOpen(p) || p.settled) continue; // P027/A1+P003/§5.4+P047：搁置、开放与已结账题退出代谢采样、停滞检测、议程与压力计
+        // ★P587（2026-10-21）：已沉积的 C 题退出压力计，与 core.mjs L79 同口径。
+        //   现场：S(t) 连续三样本递增（5.09→5.1→5.11）触发漂移信号，而查下去
+        //   不是积压恶化，是【我把做完的题算成了积压】：core.mjs 让已沉积 C 题退出指令流，
+        //   而这里只退 parked/open/settled ⇒ stage 无终态 ⇒ 每做完一题 S(t) 永久涨一点。
+        //   负控：C 但无 deposit 的题必须留下（指令流还在问它判定复用价值）。
+        if (p.stage === 'C' && p.deposit) continue;
         if (p.stage === 'G' || p.stage === 'F' || p.stage === 'S' || p.stage === 'C') {
           activeIds.push({ id: p.id, cost: p.cost, stage: p.stage });
         }
