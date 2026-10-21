@@ -70,7 +70,7 @@ export function innerAgenda(state, now) {
     const n = (typeof h.count === 'number' && h.count > 0) ? h.count : 1;
     total[h.key] = (total[h.key] || 0) + n;
   }
-  for (const h of outstandingHits(hits)) { if (h && h.key) owed[h.key] = (owed[h.key] || 0) + 1; }
+  for (const h of outstandingHits(hits, t)) { if (h && h.key) owed[h.key] = (owed[h.key] || 0) + 1; }
   for (const k of Object.keys(total)) {
     if (total[k] < HIT_REPEAT_MIN) continue;             // 负控：2 次不提
     if (!owed[k]) continue;                              // ★★负控：全已处置且无 stillOpen ⇒ 不产出
@@ -88,21 +88,45 @@ export function innerAgenda(state, now) {
   //     ⇒ **单笔欠账永远不会变成议程**（除非同一件事欠够 3 次）
   //   ★本来源只看"有没有欠账"，**与它被提醒过几次无关**——欠账是硬的，不取决于次数。
   //   ★权重高于 ②：**"真的欠着"比"反复出现"更硬**（否则后者会盖过前者）。
-  const open = outstandingHits(hits);
+  // ★P583 修：`hit-open` 报**欠账对象数**，记录数放括号里。
+  //
+  //   现场（2026-10-21）：81 条命中里 24 条 stillOpen，而它们只落在**两个 key** 上
+  //   （「项目定位」17 · 「愿景」7）。而议程报的是 `open.length` = 24 —— 于是
+  //   「一件事被记录 17 次」被读成「17 笔债」。
+  //
+  //   ★这是 P574 修过的那个病的**第二个形态**：
+  //     P574 修了 `recordHit` 的合并（同一 key 未处置期间的连续注入 → `count`），
+  //     但 `owed` / `open.length` 仍然数**记录条数**，而不是**欠账对象数**。
+  //   ⇒ 一句话：**记录数是账本的形状，欠账对象数才是"我欠几件事"。**
+  //
+  //   而这也让文字与数字一致：旧版报「24 笔……「项目定位」·「愿景」」，
+  //   数字是 24 而列出的对象只有 2 个 —— 那种不一致本身就是判据失灵的味道。
+  const open = outstandingHits(hits, t);
   if (open.length) {
-    const keys = [], seen = Object.create(null);
+    const keys = [], seen = Object.create(null), perKey = Object.create(null);
     for (const h of open) {
       const k = String((h && h.key) || '').trim();
-      if (k && !seen[k]) { seen[k] = 1; keys.push(k); }
+      if (!k) continue;
+      perKey[k] = (perKey[k] || 0) + 1;
+      if (!seen[k]) { seen[k] = 1; keys.push(k); }
     }
+    const nObj = keys.length;                 // 欠账【对象】数
+    const nRec = open.length;                 // 欠账【记录】数
     out.push({
       kind: 'hit-open', level: LEVEL, ref: 'hits:open', key: keys[0] || '',
-      text: '有 ' + open.length + ' 笔命中还没清账：'
-        + keys.slice(0, 3).map(function (k) { return '「' + k + '」'; }).join(' · ')
-        + (keys.length > 3 ? ' 等 ' + keys.length + ' 个对象' : ''),
+      text: (nObj === nRec)
+        ? ('有 ' + nObj + ' 笔命中还没清账：'
+           + keys.slice(0, 3).map(function (k) { return '「' + k + '」'; }).join(' · ')
+           + (keys.length > 3 ? ' 等 ' + keys.length + ' 个对象' : ''))
+        : ('有 ' + nObj + ' 个对象还没清账（共 ' + nRec + ' 条记录）：'
+           + keys.slice(0, 3).map(function (k) {
+             return '「' + k + '」×' + perKey[k];
+           }).join(' · ')
+           + (keys.length > 3 ? ' 等 ' + keys.length + ' 个对象' : '')),
       because: '**未处置是我欠的账**——命中了却没说清怎么处置，等于没被约束过'
-        + '（用 `mpm_hit action=dispose` 留痕；处置了但它仍挂着 ⇒ 传 `stillOpen: true`）',
-      weight: 40 + open.length
+        + '（用 `mpm_hit action=dispose` 留痕；处置了但它仍挂着 ⇒ 传 `stillOpen: true`，'
+        + '而它会带一个**承诺复查期**（缺省 14 天）——到期后不再计入欠账，但记录仍在）',
+      weight: 40 + nObj
     });
   }
 

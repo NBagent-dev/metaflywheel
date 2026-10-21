@@ -856,7 +856,9 @@ export function makeTools(deps) {
           key: { type: 'string', description: 'dispose：按约束对象清账（从最新往前一条）' },
           id: { type: 'string', description: 'dispose：按命中 id 精确清账（优先于 key）' },
           myAction: { type: 'string', description: 'dispose **必填**：我当时如何处置（必须可被下一次观测校验）' },
-          stillOpen: { type: 'boolean', description: 'dispose 可选：**我处置了，但这件事仍未解决**——勾上它，内生议程的"反复命中"才不会把"已处置"误当"已解决"（不勾 = 真的解决了）' }
+          stillOpen: { type: 'boolean', description: 'dispose 可选：**我处置了，但这件事仍未解决**——勾上它，内生议程的"反复命中"才不会把"已处置"误当"已解决"（不勾 = 真的解决了）。★P583：勾上时会给一个**承诺复查期**，到期后自动不再计入欠账（记录仍在，仍可重新确认）' },
+          stillOpenDays: { type: 'number', description: 'dispose 可选：承诺复查期（天）。缺省 14（v0 常数，与沉积衰减同期）。仅 stillOpen: true 时有效' },
+          redo: { type: 'boolean', description: 'dispose 可选：**允许对已处置的条目重新处置**（显式确认 / 改口径 / 给旧数据补期限）。缺省 false ⇒ 保持"一次处置一条、不碰已处置"的老语义' }
         }
       },
       [],
@@ -864,7 +866,7 @@ export function makeTools(deps) {
         const d = CURRENT_DEPS;
         const act = String(args.action || 'list').toLowerCase();
         if (act === 'dispose') {
-          const r = disposeHit(d.state.hits, String(args.id || args.key || ''), args.myAction, Date.now(), args.stillOpen);
+          const r = disposeHit(d.state.hits, String(args.id || args.key || ''), args.myAction, Date.now(), args.stillOpen, args.stillOpenDays, args.redo);
           if (!r.disposed.length) return { ok: false, report: '未清账：要么没给 myAction（**空处置不算处置**），要么 id/key 没匹配到未处置的命中记录。' };
           d.state.hits = r.list;
           const pr = await d.persist();

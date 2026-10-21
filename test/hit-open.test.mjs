@@ -19,7 +19,8 @@ import { recordHit, disposeHit } from '../engine/modules/hits.mjs';
 
 const mk = (key, at) => ({ key, tool: 't', verdict: 'hint', text: 'T', at });
 const st = (hits) => ({ hits, unknowns: [], sediments: [] });
-const kindOf = (s, k) => innerAgenda(s, 1e12).filter(function (i) { return i.kind === k; });
+const kindOf = (s, k, now) => innerAgenda(s, (typeof now === 'number') ? now : 1e12)
+  .filter(function (i) { return i.kind === k; });
 
 test('①★单一笔欠账（总命中数 < 阈值）也必须产出 hit-open', () => {
   // 这正是现场：33 次命中里 4 笔未处置——但它们各自"总次数"不足 3 ⇒ 旧逻辑永不报
@@ -40,7 +41,10 @@ test('②负控：全部已处置且无 stillOpen ⇒ 不产出 hit-open', () =>
 test('③stillOpen=true 也算欠账 ⇒ 必须产出（处置 ≠ 解决）', () => {
   let l = recordHit([], mk('K', 1)).list;
   l = disposeHit(l, l[0].id, '处置了但它还挂着', 2, true).list;
-  assert.equal(kindOf(st(l), 'hit-open').length, 1,
+  // ★P583：此处在**承诺复查期内**判（缺省 14 天），所以 now 用 3 而不是 1e12。
+  //   1e12 这个缺省是为了让"零引用沉积 ≥14 天"那条判据能过，而它与 at=2 不同源 ——
+  //   加了时间窗之后，"造数据用极小时间 / 断言用极大时间"就会把仍在期内的欠账判成过期。
+  assert.equal(kindOf(st(l), 'hit-open', 3).length, 1,
     '处置了但标了"仍未解决" ⇒ 仍是欠账（这是 P523 引入 stillOpen 的全部目的）');
 });
 

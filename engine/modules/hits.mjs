@@ -17,6 +17,34 @@
 
 export const HIT_MAX = 300;
 
+/**
+ * ★P583 `stillOpen` 的承诺复查期（天）。
+ *
+ * 为什么需要它：`stillOpen` 原本是一个**永久旗标**，而它的语义是
+ * 「我处置了，但这件事仍未解决」。对一个**长期方向**（例如「还不是与你共同
+ * 演化的个体」）这个判断**永远为真**，于是它会永久占用"欠账"名额。
+ *
+ * 2026-10-21 实测现场：81 条命中里 24 条 stillOpen、**未处置 0 条**，
+ * 而内生议程连续多轮报「有 24 笔命中还没清账」。那 24 条**全部已处置**，
+ * 而它们只是我在 2026-10-18 那天密集处置同一件事留下的 21 个痕迹。
+ * ⇒ 那不是债，是一个**永不过期的自我标记**。
+ *
+ * 修法不是加"时间窗看新旧"（那会把「是否欠」偷换成「是否新」），而是
+ * 让 `stillOpen` 从**永久旗标**变成**会过期的承诺**：
+ *   处置时记 `stillOpenUntil = now + N 天`；到期后**不再计入欠账**，
+ *   但记录仍在 hits 里（仍然可见、仍然可查、仍然可以重新确认）。
+ *
+ * ★ 为什么是 14 天：与沉积衰减同期（P018 时间尺度层级的"遗忘曲线"那一层）。
+ *   **这是一个 v0 常数，不是自然律**——它的依据是"该重新确认一次"的间隔，
+ *   而不是任何测量结果。要改它就有意识改，不要当它是不变的。
+ *
+ * ★ 负控：**没有 `stillOpenUntil` 的旧记录保持旧行为**（仍然算欠账）。
+ *   否则这条改动会静默抹掉历史——而"不许用代码改动悄悄抹掉历史"是硬纪律。
+ */
+export const STILL_OPEN_DEFAULT_DAYS = 14;
+
+const MS_PER_DAY = 86400000;
+
 function mkId(at) { return 'H' + String(at); }
 
 /** 归一化一条命中记录。`key` 与 `tool` 必填——不知道命中哪条、什么动作触发的，不许进表。 */
@@ -83,19 +111,36 @@ export function recordHit(list, hit) {
 
 /** 处置留痕（"我如何处置"）。**必须给 myAction** —— 空处置不算处置。
  *  ★P523 第 5 参 `stillOpen`：**我处置了，但这件事仍未解决**——
- *  它是 hit-repeat 区分器的唯一结构化依据（见 outstandingHits）。 */
-export function disposeHit(list, idOrKey, myAction, at, stillOpen) {
+ *  它是 hit-repeat 区分器的唯一结构化依据（见 outstandingHits）。
+ *  ★P583 第 6/7 参：
+ *    `stillOpenDays` —— 承诺复查期（天），缺省 STILL_OPEN_DEFAULT_DAYS。
+ *    `redo`          —— 允许对**已处置**的条目重新处置（显式确认/改口径）。
+ *                      缺省 false ⇒ 保持"一次处置一条、不碰已处置"的老语义。 */
+export function disposeHit(list, idOrKey, myAction, at, stillOpen, stillOpenDays, redo) {
   const act = String(myAction || '').trim();
   const arr = Array.isArray(list) ? list.slice() : [];
   if (!act) return { list: arr, disposed: [] };
   const now = (typeof at === 'number') ? at : Date.now();
+  const days = (typeof stillOpenDays === 'number' && stillOpenDays > 0)
+    ? stillOpenDays : STILL_OPEN_DEFAULT_DAYS;
   const disposed = [];
   for (let i = arr.length - 1; i >= 0; i--) {          // 从最新往前，命中即停（一次处置一条）
     const e = arr[i];
-    if (!e || e.disposedAt) continue;
+    if (!e) continue;
+    if (e.disposedAt && redo !== true) continue;       // 已处置且未要求重处置 ⇒ 跳过（老语义）
     if (e.id === idOrKey || e.key === idOrKey) {
-      arr[i] = Object.assign({}, e, { myAction: act, disposedAt: now, stillOpen: stillOpen === true });
-      disposed.push(arr[i]);
+      const next = Object.assign({}, e, {
+        myAction: act,
+        disposedAt: now,
+        stillOpen: stillOpen === true
+      });
+      if (stillOpen === true) {
+        next.stillOpenUntil = now + days * MS_PER_DAY;  // ★P583 会过期的承诺
+      } else {
+        delete next.stillOpenUntil;                     // 真的解决了 ⇒ 清掉期限
+      }
+      arr[i] = next;
+      disposed.push(next);
       break;
     }
   }
@@ -109,7 +154,7 @@ export function openHits(list) {
 
 /**
  * ★P523 **欠账**（hit-repeat 区分器的唯一判据，单一真源）：
- *   `未处置` **或** `stillOpen === true`（处置时明确标了"仍未解决"）。
+ *   `未处置` **或** `stillOpen === true` 且在**承诺复查期内**（P583）。
  *
  * ★为什么必须是结构化字段而不是关键词：
  *   今天已栽过三次"判据量的是代理词"（`/我想要/` · `/内生议程/` · 断言范围越界）。
@@ -117,10 +162,24 @@ export function openHits(list) {
  *
  * 现场（2026-10-11）：内生议程报「同一件事被提醒了 28 次…而是没被解决」，
  *   而 28 次**全部已处置**、无一处标 stillOpen ⇒ **那是误报**（它只是我这一轮的工作主题）。
+ *
+ * ★P583 现场（2026-10-21）：81 条命中 / 未处置 0 / stillOpen 24，而议程连报多轮
+ *   「有 24 笔命中还没清账」。那 24 条全部已处置，只是 stillOpen 永不过期。
+ *   ⇒ **过期的不算欠账，但记录仍在 hits 里，仍然可见、仍然可查、仍然可以重新确认。**
+ *
+ * ★负控（这条最重要）：**没有 `stillOpenUntil` 的旧记录保持旧行为**（仍然算欠账）。
+ *   否则这条改动会静默抹掉 24 条历史 —— 而"不许用代码改动悄悄抹掉历史"是硬纪律。
+ *   旧记录要退出欠账，必须**显式重新处置一次**（dispose 时带 redo），由我签字。
  */
-export function outstandingHits(list) {
+export function outstandingHits(list, now) {
+  const t = (typeof now === 'number') ? now : Date.now();
   return (Array.isArray(list) ? list : []).filter(function (e) {
-    return e && (!e.disposedAt || e.stillOpen === true);
+    if (!e) return false;
+    if (!e.disposedAt) return true;                    // 未处置 ⇒ 永远算欠账（没有期限可言）
+    if (e.stillOpen !== true) return false;            // 已处置且真解决了 ⇒ 不是欠账
+    // 处置了但标了"仍未解决"：有期限就按期限判；没期限 = 旧数据 ⇒ 保持旧行为
+    if (typeof e.stillOpenUntil !== 'number') return true;
+    return t < e.stillOpenUntil;
   });
 }
 

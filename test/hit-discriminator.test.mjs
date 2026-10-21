@@ -73,9 +73,30 @@ test('⑤outstandingHits：未处置 与 stillOpen 都算欠账；已处置且�
   l = disposeHit(l, l[1].id, '处置了', 3, false).list;      // 已处置未标 ⇒ 不欠
   l = recordHit(l, mk('C', 4)).list;
   l = disposeHit(l, l[2].id, '处置了但它还挂着', 5, true).list; // 已处置 + stillOpen ⇒ 欠账
-  const out = outstandingHits(l);
-  assert.equal(out.length, 2, '欠账 = 未处置 或 stillOpen：' + JSON.stringify(out.map(x => x.key)));
+  // ★P583：`now` 必须落在**承诺复查期内**（缺省 14 天）。
+  //   这里造数据用的 at 是 1..5（假时间），所以不能拿 Date.now() 去判 ——
+  //   那是 1.79e12，会让 5 + 14天 ≈ 1.2e9 早就"过期"。
+  //   ⇒ **时间必须同源**：造数据用小 at，判也必须用小 now。
+  const out = outstandingHits(l, 6);
+  assert.equal(out.length, 2, '欠账 = 未处置 或 期内 stillOpen：' + JSON.stringify(out.map(x => x.key)));
   assert.deepEqual(out.map(x => x.key).sort(), ['A', 'C']);
+});
+
+test('⑤b★P583 stillOpen 到期后不再算欠账，但记录仍在（会过期 ≠ 被删除）', () => {
+  const DAY = 86400000;
+  let l = recordHit([], mk('D', 1000)).list;
+  l = disposeHit(l, l[0].id, '处置了但方向性的事仍未解决', 1000, true, 2).list; // 2 天期限
+  assert.equal(l.length, 1, '记录必须还在');
+  assert.equal(l[0].stillOpen, true, 'stillOpen 必须原样保留——到期只影响"算不算欠账"');
+  assert.equal(typeof l[0].stillOpenUntil, 'number', '必须落下期限字段');
+  // 期内（+1 天）⇒ 算欠账
+  assert.equal(outstandingHits(l, 1000 + 1 * DAY).length, 1, '期内必算');
+  // 期外（+3 天）⇒ 不算欠账
+  assert.equal(outstandingHits(l, 1000 + 3 * DAY).length, 0, '期外不算——否则长期方向会永久占位');
+  // ★负控：旧数据（无 stillOpenUntil）必须保持旧行为 —— 不许用代码改动悄悄抹掉历史
+  const legacy = [{ id: 'X', key: 'D', stillOpen: true, disposedAt: 999 }];
+  assert.equal(outstandingHits(legacy, 1000 + 999 * DAY).length, 1,
+    '没有期限字段的旧记录仍算欠账（要退出必须显式重处置一次）');
 });
 
 test('⑥because 从句必须【说事实】，不许是格言（"通常不是…而是…"）', () => {
