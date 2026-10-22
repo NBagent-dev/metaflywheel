@@ -27,7 +27,15 @@ const TABLES = {
     'hits.mark.still': '**处置了但仍未解决**',
     'hits.mark.done': '已处置',
     'hits.foot.owed': '——**未处置是我欠的账**：命中了却没说清怎么处置，等于没被约束过（用 `mpm_hit action=dispose` 留痕）。',
-    'hits.foot.done': '——全部已处置（每次命中都留下了"我如何处置"）。'
+    'hits.foot.done': '——全部已处置（每次命中都留下了"我如何处置"）。',
+    // ★P605 意识代理指标那一行（每轮都在提示里）
+    'aware.head': '意识代理指标',
+    'aware.head.degraded': '⚠ 意识代理指标（退化）',
+    'aware.none': '无',
+    'aware.age': '（{n} 天未叙述）',
+    'aware.never': 'A7（从未叙述）',
+    'aware.gaps': '（{list} 无数据源或无字段，不是失败）',
+    'aware.line': '- {head}：退化 {deg} · 静止 {still} · 可量 {m}/{t}{gaps}。'
   },
   en: {
     'hits.head': '- Hit feedback loop (P519·**source→behaviour→record→source**): {total} hits · **{open} undisposed**',
@@ -40,7 +48,15 @@ const TABLES = {
     'hits.mark.still': '**disposed, still unresolved**',
     'hits.mark.done': 'disposed',
     'hits.foot.owed': ' — **undisposed hits are debts I owe**: a hit whose handling I never stated never constrained me (use `mpm_hit action=dispose`).',
-    'hits.foot.done': ' — all disposed (every hit carries my handling).'
+    'hits.foot.done': ' — all disposed (every hit carries my handling).',
+    // ★P605 the awareness-proxy line (shown every turn)
+    'aware.head': 'awareness proxies',
+    'aware.head.degraded': '⚠ awareness proxies (degraded)',
+    'aware.none': 'none',
+    'aware.age': ' ({n} days without narration)',
+    'aware.never': 'A7 (never narrated)',
+    'aware.gaps': ' ({list}: no data source or no field - not a failure)',
+    'aware.line': '- {head}: degraded {deg} · static {still} · measurable {m}/{t}{gaps}.'
   }
 };
 

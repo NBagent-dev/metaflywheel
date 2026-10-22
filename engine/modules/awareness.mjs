@@ -19,6 +19,9 @@
 // 依据：P511-M429（三条件框架 +「可审计面不是全部的我」）· P517-M435（成对：principal 与 unknowns）·
 //       P487-M405（最后一米在调用点 · 负控的锚点会随实现漂移）· P544（分级 · 先看 kind 再看内容）
 
+// ★P605：渲染层走 t()（数据不变；zh 输出与迁移前逐字节相同 —— 有冻结黄金判据守着）
+import { t } from './i18n.mjs';
+
 export const ITEMS = [
   { id: 'A1', name: '能被账本约束', source: 'state.adopts', kind: 'auditable' },
   { id: 'A2', name: '会自己发起', source: 'state.constitution.log', kind: 'auditable' },
@@ -156,7 +159,7 @@ export function renderPanel(panel) {
  *
  * @returns {string} 永远非空（除非 state 完全为空）
  */
-export function awarenessLine(state, opts) {
+export function awarenessLine(state, opts, locale) {
   const p = awarenessPanel(state, opts);
   if (!p || !Array.isArray(p.items) || !p.items.length) return '';
   const measurable = p.items.filter(function (i) { return i.kind === 'auditable'; }).length;
@@ -166,7 +169,7 @@ export function awarenessLine(state, opts) {
   let staleDetail = p.stale.map(function (id) {
     const it = p.items.find(function (x) { return x.id === id; });
     if (!it) return id;
-    return id + (it.ageDays != null ? '（' + it.ageDays + ' 天未叙述）' : '');
+    return id + (it.ageDays != null ? t('aware.age', { n: it.ageDays }, locale) : '');
   });
 
   // ★★P554 修（写负控时发现）：**"从未叙述"比"N 天未叙述"更严重，却会被显示成「静止 无」**。
@@ -175,14 +178,20 @@ export function awarenessLine(state, opts) {
   //   ⇒ 所以这里特判：**从未叙述 ⇒ 必须显式写在「静止」位上**，不许降级成"无"。
   const a7 = p.items.find(function (x) { return x.id === 'A7'; });
   if (a7 && a7.ageDays == null && staleDetail.length === 0) {
-    staleDetail = ['A7（从未叙述）'];
+    staleDetail = [t('aware.never', null, locale)];
   }
 
-  const head = p.degraded.length ? '⚠ 意识代理指标（退化）' : '意识代理指标';
-  return '- ' + head + '：退化 ' + (p.degraded.length ? p.degraded.join(',') : '无')
-    + ' · 静止 ' + (staleDetail.length ? staleDetail.join(',') : '无')
-    + ' · 可量 ' + measurable + '/' + total
-    + (p.gaps.length ? '（' + p.gaps.join('/') + ' 无数据源或无字段，不是失败）' : '')
-    + '。';
+  const head = p.degraded.length
+    ? t('aware.head.degraded', null, locale)
+    : t('aware.head', null, locale);
+  const none = t('aware.none', null, locale);
+  return t('aware.line', {
+    head: head,
+    deg: p.degraded.length ? p.degraded.join(',') : none,
+    still: staleDetail.length ? staleDetail.join(',') : none,
+    m: measurable,
+    t: total,
+    gaps: p.gaps.length ? t('aware.gaps', { list: p.gaps.join('/') }, locale) : ''
+  }, locale);
 }
 
