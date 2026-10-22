@@ -16,6 +16,7 @@ import { normalizeRetrievalWeights } from "./retrieval-weights.mjs";   // ★P59
 import { innerAgenda } from "./agenda.mjs";   // ★P593：mpm_weights show 要打印真实议程的占比  // ★P591：沉积的「被取代」（ADR 式）
 import { sedimentCacheGet, retrieveTop } from "./retrieval.mjs";
 import { persistNote } from "./state.mjs";
+import { localizeTools } from "./i18n.mjs";   // ★P603②：工具描述走 locale（zh 用源码原文，en 用 TOOL_EN）
 import { rhythmOf, normalizeRhythm, rhythmLine } from "./rhythm.mjs";
 
 // ══ P482 账本可达性三件套（A 强制 / B 便宜 / C 可见）══════════════════════
@@ -738,7 +739,7 @@ async function toolNarrate(d, args, exec) {
 export function makeTools(deps) {
   const d = deps;
   CURRENT_DEPS = deps;   // P487①：绑定给 mkTool 的"落盘结论"包装器
-  return [
+  const all = [
     // ★P482④ 调度权：个体可以**改写自己的节律**（陈旧阈值 / 发动节流 / 静默时段）。
     //   约束写死在 rhythm.mjs 与 test/rhythm.test.mjs：有界（不许把自己写死）、越界不静默、
     //   可见（快照标明"自我设定"还是"出厂默认"）、可回退（reset）。
@@ -1244,4 +1245,7 @@ export function makeTools(deps) {
       (args, exec) => toolNarrate(d, args, exec)
     ),
   ];
+  // ★P603②：**一处包装**而不是改 21 处 —— 描述是数据，不该在 21 个调用点上各写一遍语言分支。
+  //   zh（默认）⇒ 原样返回，一个字节都不动；en ⇒ description 换成 TOOL_EN（缺条目回退中文，判据会红）。
+  return localizeTools(all, d && d.locale);
 }

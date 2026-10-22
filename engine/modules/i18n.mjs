@@ -74,7 +74,60 @@ export function t(key, params, locale) {
   return s;
 }
 
-/** 表里出现过的全部键（供"双表键集合必须相等"这条判据用）。 */
+/**
+ * ★P603② 工具描述的英文表。
+ *
+ * ★为什么是独立表而不是并进 TABLES：中文原文**留在 tools.mjs 里**（它是给模型看的详细说明，
+ *   引号密集、逐字翻译会把它变成第二个真相源）。所以策略是：
+ *     zh  → 用源码里的原文（一个字节都不动）
+ *     en  → 用本表；缺条目时**运行时回退到中文**（插件仍可用），但**判据会红**（不许发布）
+ *   ⇒ 运行时宽容、发布严格：缺一条英文不会让插件崩，但会让 CI 红。
+ *
+ * ★质量标准：中文是"写给模型看的详尽说明"，英文这里先做到**准确 + 可操作**，
+ *   不追求与中文等长。等长翻译是后续工作，不是这一轮的门槛。
+ */
+export const TOOL_EN = {
+  'mpm_generate': 'Open a problem (G): register an anomaly or gap as a formal problem worth pursuing, and say why it is a problem.',
+  'mpm_frame': 'Frame a problem (F): state initial state, goal, constraints, available operators and success criteria, then give delta (0-1, lower is better). Re-framing an already framed problem is a causal re-entry, not an error.',
+  'mpm_solve': 'Enter solving (S): normal tools do the work; this call registers the path and updates epsilon (distance to goal, 0-1).',
+  'mpm_converge': 'Check the epsilon-delta convergence criterion (C): fully converged / mis-framed / fuzzy / unconverged, each with the methodology it demands.',
+  'mpm_deposit': 'Deposit (D): turn the solved structure into an irreversible, indexable cognitive remain under the sediment root. Requires links or an explicit linkReason.',
+  'mpm_evoke': 'Evoke (E): when the world drifts or new evidence rubs against an old deposit, let that deposit open a new problem.',
+  'mpm_micro': 'Lightweight channel: the whole lifecycle G-F-S-C in one call for small interactions. Deposit only if there is reuse value.',
+  'mpm_hit': 'Read and settle hits: what was surfaced before acting, how I handled it. dispose requires myAction; stillOpen marks a promise with a re-check date; direction marks something that is a direction, not a debt.',
+  'mpm_adopt': 'Record real adoption BEFORE acting: which sediment changed what I did, and what I would have done without it. Post-hoc links never count.',
+  'mpm_principal': 'Record the principal\'s own way of thinking (his words, the object it constrains, the occasion). Only after he explicitly confirms.',
+  'mpm_unknown': 'Unverified list: things I marked as "not verified", each with a retirement condition. Resolving requires evidence, not a feeling.',
+  'mpm_weights': 'Show or adjust agenda weights, printing each source\'s contribution as a share and warning above 60% for a single source.',
+  'mpm_rank_eval': 'Re-runnable retrieval metric: use recorded adoptions as ground truth to judge whether the weighting surfaces what should have been recalled.',
+  'mpm_index': 'Offline word-surface index: report / write / verify. Deterministic by design, so it can be rebuilt and diffed byte for byte.',
+  'mpm_supersede': 'Mark a deposit as superseded or refuted (ADR style): retired from injection, still retrievable by ID. Retirement is not deletion.',
+  'mpm_enrich': 'Append keywords or aliases to a deposit\'s searchable surface. The original text is never touched - it is the judge\'s baseline.',
+  'mpm_flywheel_state': 'Show the whole flywheel: stages, delta/epsilon, re-framings, metabolic cost, deposit index and loop gain.',
+  'mpm_rhythm': 'Show or rewrite my own rhythm: staleness threshold, fire throttle, quiet hours. Bounded, visible, resettable to factory values.',
+  'mpm_grant': 'Constitutive executive power: grant / revoke / status. Revocation is sticky until granted again.',
+  'mpm_narrate': 'Narrate 2-5 first-person lines about a salient in-turn experience. Signals are attached automatically.',
+  'mpm_setroot': 'Maintenance: set the sediment root explicitly when auto-detection is ambiguous. Migrates the index and files; old files are kept.'
+};
+
+/**
+ * 把工具 description 换成本地语言。zh ⇒ 原样返回（**一个字节都不动**）。
+ * 缺英文条目 ⇒ 回退中文（不崩），但 test/i18n.test.mjs 会红 ⇒ 不许发布。
+ */
+export function localizeTools(tools, locale) {
+  const L = resolveLocale(locale);
+  if (!Array.isArray(tools)) return tools;
+  if (L === DEFAULT_LOCALE) return tools;
+  return tools.map(function (t) {
+    if (!t || typeof t !== 'object') return t;
+    const en = TOOL_EN[t.name];
+    if (typeof en !== 'string') return t;
+    return Object.assign({}, t, { description: en });
+  });
+}
+
+/**
+ * 表里出现过的全部键（供"双表键集合必须相等"这条判据用）。 */
 export function allKeys() {
   const seen = {};
   for (let i = 0; i < LOCALES.length; i++) {
