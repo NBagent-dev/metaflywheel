@@ -116,7 +116,7 @@ export function recordHit(list, hit) {
  *    `stillOpenDays` —— 承诺复查期（天），缺省 STILL_OPEN_DEFAULT_DAYS。
  *    `redo`          —— 允许对**已处置**的条目重新处置（显式确认/改口径）。
  *                      缺省 false ⇒ 保持"一次处置一条、不碰已处置"的老语义。 */
-export function disposeHit(list, idOrKey, myAction, at, stillOpen, stillOpenDays, redo) {
+export function disposeHit(list, idOrKey, myAction, at, stillOpen, stillOpenDays, redo, direction) {
   const act = String(myAction || '').trim();
   const arr = Array.isArray(list) ? list.slice() : [];
   if (!act) return { list: arr, disposed: [] };
@@ -134,9 +134,17 @@ export function disposeHit(list, idOrKey, myAction, at, stillOpen, stillOpenDays
         disposedAt: now,
         stillOpen: stillOpen === true
       });
-      if (stillOpen === true) {
+      // ★P601：第三层处置——**方向**（direction）。方向不是任务：它没有完成状态。
+      //   用 stillOpen 表达它只有两个结果：false = 撒谎，true = 无尽（每 45 分钟报一次）。
+      if (direction === true) {
+        next.direction = true;
+        next.stillOpen = false;          // "不适用"，不是"未解决"
+        delete next.stillOpenUntil;      // 方向不需要复查期
+      } else if (stillOpen === true) {
+        delete next.direction;           // ★负控：取消方向必须真清掉，不许残留成隐性豁免
         next.stillOpenUntil = now + days * MS_PER_DAY;  // ★P583 会过期的承诺
       } else {
+        delete next.direction;
         delete next.stillOpenUntil;                     // 真的解决了 ⇒ 清掉期限
       }
       arr[i] = next;
@@ -175,12 +183,23 @@ export function outstandingHits(list, now) {
   const t = (typeof now === 'number') ? now : Date.now();
   return (Array.isArray(list) ? list : []).filter(function (e) {
     if (!e) return false;
+    // ★P601：**方向不是欠账**。★负控：只看 e.direction，**不按 key 连坐**
+    //   —— 否则"方向"会变成"这个话题以后都免检"的永久豁免。
+    if (e.direction === true) return false;
     if (!e.disposedAt) return true;                    // 未处置 ⇒ 永远算欠账（没有期限可言）
     if (e.stillOpen !== true) return false;            // 已处置且真解决了 ⇒ 不是欠账
     // 处置了但标了"仍未解决"：有期限就按期限判；没期限 = 旧数据 ⇒ 保持旧行为
     if (typeof e.stillOpenUntil !== 'number') return true;
     return t < e.stillOpenUntil;
   });
+}
+
+/**
+ * ★P601：方向条目（不参与欠账，但**必须可见**——消失比误报更糟）。
+ * 与 outstandingHits 互补：两者合起来应当覆盖"处置过的全部记录"。
+ */
+export function directionHits(list) {
+  return (Array.isArray(list) ? list : []).filter(function (e) { return !!(e && e.direction === true); });
 }
 
 /** 归并（恢复纪律：并集 + 按 id 去重，沿用 P514/P517/P519 同一条）。 */
