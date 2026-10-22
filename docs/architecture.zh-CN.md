@@ -61,7 +61,7 @@ npm test                      # 全部判据，不需要任何外部服务
 
 ## 诚实的说明（这一段比上面都重要）
 
-1. **理论部分是一份未定稿。** [docs/theory.md](theory.md) 是一篇约 4 万字的方法论文，
+1. **理论部分是一份未定稿。** [docs/theory.zh-CN.md](theory.zh-CN.md) 是一篇约 4 万字的方法论文，
    由仓库使用者和 AI 协作写成，**标着"作者终审待做"**。它不是已发表文献，也不该被当作外部权威引用。
 
 2. **代码有相当比例由 AI 写。** 这一点不打算掩饰。而每一条判据都经过人工审查并**留有失败记录**——
@@ -103,7 +103,7 @@ view/              可选的可视化
 ```
 
 想看实现细节 → [docs/architecture.zh-CN.md](architecture.zh-CN.md)
-想看那篇论文 → [docs/theory.md](theory.md)
+想看那篇论文 → [docs/theory.zh-CN.md](theory.zh-CN.md)
 想知道某个编号是什么 → [docs/ledger.md](ledger.md)
 
 ---

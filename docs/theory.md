@@ -1,378 +1,380 @@
-# MPM 论文 v2（理论文档）
+# MPM paper v2 (theory document)
 
-> 状态：v2 代拟稿，作者终审待做。本文件是 MetaFlywheel 引擎实现的理论基准。
+**English** · [简体中文](theory.zh-CN.md)
 
-# 元问题建模：问题生命周期、逼近论与认知飞轮（v2）
+> Status: v2 draft, awaiting author sign-off. This file is the theoretical baseline of the MetaFlywheel engine implementation.
 
-## ——从系统熵减到认知演化的统一框架，及其在 LLM 代理运行时中的实现与实证
+# Meta-Problem Modeling: Problem Lifecycle, Approximation Theory and the Cognitive Flywheel (v2)
 
-**版本说明**：v2 在 v1 基础上完成三级修订——A级硬修订（式(4)替换、§5.4/§4.6 运行时语义）全部绑定运行时实测证据；B级新增第 6 章（规范性执行机构）与第 7 章（测量方法学 v0）；C级扩写自指检验并补全参考文献。公理骨架（第 3 章）未改动：三条公理经受住了 30 个问题、19 份沉积物、32 轮巡检的运行时检验。
+## — a unified framework from system entropy reduction to cognitive evolution, with its implementation and evidence in an LLM agent runtime
 
-**摘要**：传统问题求解理论多聚焦于给定问题后的搜索过程，对问题自身的生成、界定、演化与再生缺乏统一框架。本文提出元问题建模（Meta-Problem Modeling, MPM）理论，将问题视为具有生命周期的动态系统，构建包含问题生成、界定、求解、收敛、沉积、激发六阶段的认知飞轮模型。MPM 以主客二元性、熵减、逼近论三条公理为基础，引入 ε-δ 双重收敛判据，以"因果回溯"机制解释问题在求解中的重构现象，并通过沉积-激发机制实现认知的螺旋上升。v2 的两项主要扩展来自框架自身在 LLM 代理运行时中的实现（30 题/19 沉积/32 轮巡检的实战台账）：其一，**规范性执行机构**——方法论遵行不能依赖主体自律或提示词祈祷，而须依靠使违规在结构上无收益的门禁设计，这为理论长期存在的"描述性与规范性张力"提供了工程解；其二，**测量方法学 v0**——δ/ε 的代理指标体系、累积增益的可操作定义（含原式结构性归零的实测教训），以及"测量指标自身具有生命周期"的元洞见。理论仍以三个跨领域案例验证解释力，并以一个带完整代谢账本的自指闭环收束：论文的迭代本身由框架的激发机制驱动。
+**Version note**: v2 completes three levels of revision over v1 — level A (hard revisions: replacement of equation (4), runtime semantics in §5.4 and §4.6), all bound to runtime evidence; level B (two new chapters: chapter 6 on normative enforcement machinery and chapter 7 on measurement methodology v0); level C (the self-reference test expanded, references completed). The axiomatic skeleton (chapter 3) is unchanged: the three axioms survived runtime testing over 30 problems, 19 deposits and 32 patrol rounds.
 
-**关键词**：元问题建模；问题生命周期；逼近论；认知飞轮；因果回溯；规范性执行机构；自由能原理
+**Abstract**: Classical problem-solving theory focuses on the search process after a problem has been given, and lacks a unified framework for the generation, framing, evolution and regeneration of problems themselves. This paper proposes Meta-Problem Modeling (MPM), which treats a problem as a dynamic system with a lifecycle and constructs a cognitive-flywheel model of six stages: generation, framing, solving, convergence, deposition and evocation. MPM rests on three axioms — subject-object duality, entropy reduction, and approximation — introduces a dual ε-δ convergence criterion, explains the re-framing of problems during solving through "causal re-entry", and achieves a cognitive spiral through deposition and evocation. The two main extensions in v2 come from the framework's own implementation inside an LLM agent runtime (a working ledger of 30 problems, 19 deposits and 32 patrol rounds). First, **normative enforcement machinery**: adherence to a methodology cannot rest on the subject's self-discipline or on hoping a prompt works; it must rest on gate design that makes violation structurally unprofitable — an engineering answer to the long-standing descriptive/normative tension. Second, **measurement methodology v0**: a proxy-indicator system for δ and ε, an operational definition of cumulative gain (including the measured lesson that the original formula was structurally zero), and the meta-insight that measurement indicators themselves have a lifecycle. The theory is still validated by three cross-domain cases, and closes with a self-referential loop carrying a complete metabolic ledger: the iteration of this paper is itself driven by the framework's evocation mechanism.
+
+**Keywords**: meta-problem modeling; problem lifecycle; approximation theory; cognitive flywheel; causal re-entry; normative enforcement machinery; free energy principle
 
 ---
 
-## 1 引言
+## 1 Introduction
 
-### 1.1 研究背景与问题提出
+### 1.1 Background and problem statement
 
-自 Newell 与 Simon 于 1972 年出版《人类问题求解》以来，问题求解已成为认知科学、人工智能与运筹学的核心范式。经典理论将问题定义为"初始状态-目标状态-算子集合"的三元组，研究焦点是在给定问题空间中搜索有效路径。这一范式在良构问题上取得巨大成功，但在面对社会政策、组织管理、AI 安全等复杂问题时暴露出根本缺陷：问题的初始状态、目标状态甚至边界本身就是模糊的、争议的，且会在求解过程中持续演化。
+Since Newell and Simon published *Human Problem Solving* in 1972, problem solving has been a core paradigm of cognitive science, artificial intelligence and operations research. Classical theory defines a problem as a triple of initial state, goal state and operator set, and studies how to search an effective path inside a given problem space. That paradigm succeeded enormously on well-structured problems, but exposes a fundamental defect on complex problems such as social policy, organisational management and AI safety: the initial state, the goal state and even the boundary of the problem are themselves vague and contested, and keep evolving while the problem is being solved.
 
-Rittel 和 Webber（1973）将这类问题命名为"抗解问题（Wicked Problem）"；Checkland（1981）的软系统方法论进一步指出，"系统性"是人类探究世界的过程属性而非世界的固有属性。这些洞见挑战了"问题先于求解而存在"的默认假设，但尚未提供将问题的生成、界定、求解、收敛与再生统一起来的形式化框架。
+Rittel and Webber (1973) named such problems "wicked"; Checkland's (1981) soft systems methodology further argued that "systemic" is a property of the human process of inquiry rather than of the world itself. These insights challenge the default assumption that a problem exists before its solving, but they do not yet provide a formal framework unifying the generation, framing, solving, convergence and regeneration of problems.
 
-这一理论缺口在人工智能前沿愈发紧迫。2025 年 DeepSeek-R1 验证了纯强化学习自举的长链推理能力；2026 年 OpenRSI 框架将递归自我改进（Recursive Self-Improvement, RSI）从哲学讨论推进到实验前沿。在这类系统中，"问题"不再由外部给定，而是由系统自主生成、评估与迭代——问题的生命周期与系统的认知过程深度耦合。
+The gap has become more urgent at the frontier of AI. In 2025 DeepSeek-R1 demonstrated long-chain reasoning bootstrapped by pure reinforcement learning; in 2026 the OpenRSI framework pushed recursive self-improvement (RSI) from philosophical discussion to the experimental frontier. In such systems the problem is no longer given from outside: it is generated, evaluated and iterated by the system itself, so the problem's lifecycle is deeply coupled with the system's cognitive process.
 
-v2 新增一个来自实践的反向压力：当 MPM 被实现为一个 LLM 代理中的常驻运行时（一个以组合行挂载于宿主进程的认知引擎，含九个生命周期工具、常驻巡检循环与自主审议机制），理论立刻遭遇两类 v1 未处理的问题——**描述性理论如何被强制执行**（第 6 章），以及**理论核心量的测量如何可能且如何不自欺**（第 7 章）。这两个问题不是工程细节：前者是"描述性与规范性张力"（Checkland 遗留难题）的一个工程解，后者揭示了测量断层如何伪装成理论的沉默。
+v2 adds a reverse pressure from practice. When MPM is implemented as a resident runtime inside an LLM agent (a cognitive engine mounted on a host process through a composition line, with nine lifecycle tools, a resident patrol loop and an autonomous deliberation mechanism), the theory immediately meets two questions v1 did not handle: **how a descriptive theory can be enforced** (chapter 6), and **how the theory's core quantities can be measured at all, and without self-deception** (chapter 7). Neither is an engineering detail: the first is an engineering answer to the descriptive/normative tension inherited from Checkland, and the second reveals how a measurement gap can disguise itself as the theory's silence.
 
-### 1.2 核心主张
+### 1.2 Core claims
 
-**动态性**：问题不是静态对象，而是具有生命周期的动态过程，六阶段构成螺旋上升的认知飞轮。
+**Dynamism**: a problem is not a static object but a dynamic process with a lifecycle; the six stages form an ascending spiral, the cognitive flywheel.
 
-**逼近性**：问题求解遵循逼近论逻辑，引入 δ（问题定义精度）与 ε（解的逼近精度）双参数。
+**Approximation**: problem solving follows approximation-theoretic logic, with two parameters: δ (precision of the problem definition) and ε (precision of the solution's approximation).
 
-**熵驱动**：生命周期的驱动力是系统熵减与认知收敛的耦合，与自由能原理的主动推断机制同构。
+**Entropy drive**: the lifecycle is driven by the coupling of system entropy reduction and cognitive convergence, isomorphic to the active-inference mechanism of the free energy principle.
 
-**循环性**：收敛不是终点，沉积-激发机制实现认知的代际累积。
+**Circularity**: convergence is not the endpoint; deposition and evocation produce accumulation across generations.
 
-**可执行性（v2 新增）**：上述全部构件——生命周期、判据、回溯、门禁、测量——可以在一个 LLM 代理运行时中被实现为可执行的约束与工具，且实现过程本身构成对理论的检验与修订回路。理论不再只是描述，而是可运行、可证伪、可被自己的实现反哺的规范系统。
+**Executability (new in v2)**: every component above — lifecycle, criteria, re-entry, gates, measurement — can be implemented inside an LLM agent runtime as executable constraints and tools, and the implementation itself constitutes a loop of testing and revision for the theory. The theory is no longer only descriptive: it is a normative system that runs, can be falsified, and can be fed back into by its own implementation.
 
-### 1.3 本文结构
+### 1.3 Structure
 
-第 2 章梳理理论基础；第 3 章给出三条公理；第 4 章阐述六阶段飞轮模型（含式(4) 的实证修订）；第 5 章建立 ε-δ 收敛判据及其运行时语义；第 6 章提出规范性执行机构（v2 新增）；第 7 章给出测量方法学 v0（v2 新增）；第 8 章以四个案例验证框架；第 9 章讨论适用边界与自指检验；第 10 章总结。
+Chapter 2 reviews the theoretical background; chapter 3 states three axioms; chapter 4 presents the six-stage flywheel model (including the evidence-driven revision of equation (4)); chapter 5 establishes the ε-δ convergence criterion and its runtime semantics; chapter 6 proposes the normative enforcement machinery (new in v2); chapter 7 gives measurement methodology v0 (new in v2); chapter 8 validates the framework on four cases; chapter 9 discusses scope and the self-reference test; chapter 10 concludes.
 
-## 2 理论基础与文献对话
+## 2 Theoretical background and dialogue with the literature
 
-### 2.1 经典问题求解：有限理性与问题空间
+### 2.1 Classical problem solving: bounded rationality and the problem space
 
-Simon（1955）的有限理性理论指出，决策者受认知能力、信息与时间三重约束，倾向"满意即可"。Newell 和 Simon（1972）将问题求解形式化为问题空间中的搜索。该理论隐含前提是问题空间在求解开始前已被充分界定——MPM 将这一隐含前提显性化，把问题空间的构建、修正与重构纳入统一的生命周期框架。
+Simon's (1955) theory of bounded rationality holds that a decision maker is constrained by cognitive capacity, information and time, and therefore settles for "good enough". Newell and Simon (1972) formalised problem solving as search in a problem space. That theory carries an implicit premise: the problem space is sufficiently framed before solving begins. MPM makes the premise explicit and folds the construction, correction and re-construction of the problem space into a single lifecycle framework.
 
-### 2.2 抗解问题与软系统方法论
+### 2.2 Wicked problems and soft systems methodology
 
-Rittel 和 Webber（1973）的核心洞见在于"问题是什么"本身就是求解的核心议题。Checkland（1981）通过"根定义-概念模型"迭代促进集体学习，但其规范性主张（应当如何探究）与描述性现实（实际如何探究）之间的张力在原框架中悬而未决。MPM v2 第 6 章给出该张力的工程解：规范性不经由论证被执行，而经由结构约束被执行。
+The central insight of Rittel and Webber (1973) is that "what the problem is" is itself a core issue of solving. Checkland (1981) promotes collective learning through iterations of root definition and conceptual model, but the tension between his normative claim (how inquiry ought to proceed) and descriptive reality (how it actually proceeds) remains unresolved in that framework. Chapter 6 of MPM v2 gives an engineering answer to that tension: normativity is enforced not through argument but through structural constraint.
 
-### 2.3 自由能原理与主动推断
+### 2.3 The free energy principle and active inference
 
-Friston（2010）的自由能原理认为，自组织系统通过最小化变分自由能维持自身存在；感知与行动统一为主动推断（Friston et al., 2016）。感知（更新内部模型以匹配输入）对应 MPM 的问题界定，行动（改变输入以匹配预测）对应问题求解；"因果回溯"的底层机制正是行动改变感官输入、新输入要求更新模型——问题在求解中被持续重构。
+Friston's (2010) free energy principle holds that a self-organising system maintains itself by minimising variational free energy; perception and action are unified as active inference (Friston et al., 2016). Perception (updating the internal model to match input) corresponds to MPM's framing, and action (changing input to match prediction) to its solving. The mechanism beneath "causal re-entry" is exactly this: action changes sensory input, and new input requires an updated model — the problem is continuously re-framed while it is being solved.
 
-### 2.4 逼近论的数学基础
+### 2.4 Mathematical basis in approximation theory
 
-Weierstrass（1885）与 Stone-Weierstrass 定理为 MPM 提供数学隐喻：客观问题情境类比待逼近函数，主观表征类比逼近多项式，δ 类比逼近误差。v2 的一个实证教训来自测量的反面（第 7.5 节）：当逼近误差的**度量本身**定义不当时，逼近可以在指标上呈现为"完美"（增益恒零）而实际停滞——度量的缺陷是一种特殊且隐蔽的界定失真。
+The Weierstrass (1885) and Stone–Weierstrass theorems supply MPM's mathematical metaphor: the objective problem situation is analogous to the function to be approximated, the subjective representation to the approximating polynomial, and δ to the approximation error. One measured lesson in v2 comes from the reverse side of measurement (§7.5): when the **measure of the approximation error is itself ill-defined**, approximation can look "perfect" on the indicator (gain identically zero) while actually stagnating — a defective measure is a special and well-hidden form of framing distortion.
 
-### 2.5 逻辑与博弈的边界约束
+### 2.5 Boundary constraints from logic and games
 
-哥德尔不完备性定理表明部分问题原则上不存在收敛解；PPAD 完全性（Daskalakis et al., 2009）为多主体问题提供计算复杂性边界。MPM 对这两类边界给出运行时对应（§5.4）：前者标记为"永久开放"并转向情境管理，后者降维处理——且二者在运行时中都被实现为显式状态而非隐默认。
+Gödel's incompleteness theorems show that some problems have no convergent solution in principle; PPAD-completeness (Daskalakis et al., 2009) supplies a computational-complexity boundary for multi-agent problems. MPM gives runtime counterparts for both boundaries (§5.4): the former is marked "permanently open" and shifted to situation management, the latter is handled by dimensional reduction — and both exist in the runtime as explicit states rather than as silent defaults.
 
-### 2.6 理论增量
+### 2.6 Theoretical increment
 
-MPM 不是对既有理论的替代，而是元层次的整合与拓展：将问题界定从求解的前置步骤升级为贯穿全周期的核心动态；为生命周期提供公理、判据与跨领域解释力；v2 再增两个增量——规范性的执行机构理论与核心量的测量方法学。
+MPM does not replace existing theory but integrates and extends it at the meta level: framing is upgraded from a preliminary step of solving to a core dynamic running through the whole cycle; the lifecycle gains axioms, criteria and cross-domain explanatory power; and v2 adds two increments — an enforcement theory of normativity, and a measurement methodology for the core quantities.
 
-## 3 元问题建模的公理基础
+## 3 Axiomatic basis of meta-problem modeling
 
-### 3.1 公理一：问题的主客二元性公理
+### 3.1 Axiom one: subject-object duality of a problem
 
-**公理表述**：任何问题 P 都同时具有客观维度与主观维度。客观维度是独立于认知主体的问题情境 X_obj，主观维度是认知主体对该情境的表征 Y_sub；问题 P 是二者之间的表征关系：
+**Statement**: every problem P has both an objective and a subjective dimension. The objective dimension is the problem situation X_obj, independent of the cognitive subject; the subjective dimension is the subject's representation Y_sub of that situation. The problem P is the representational relation between them:
 
-**P = ⟨X_obj, Y_sub, R⟩** （1）
+**P = ⟨X_obj, Y_sub, R⟩** (1)
 
-其中 R ⊆ X_obj × Y_sub 为主客之间的表征映射，R 不必是完美同构。
+where R ⊆ X_obj × Y_sub is the representational mapping between subject and object, and R need not be a perfect isomorphism.
 
-**论证**：若问题仅有客观维度，则同一情境对所有主体应呈现为同一问题，与现实不符；若仅有主观维度，则不存在"错误理解问题"的可能，亦与现实不符。
+**Argument**: if a problem had only an objective dimension, the same situation would present itself as the same problem to every subject, contrary to fact; if it had only a subjective dimension, "misunderstanding the problem" would be impossible, also contrary to fact.
 
-**推论 1.1（可错性）**：R 存在偏差，主观表征可能偏离客观情境——这是"问题误解"的根本来源。
+**Corollary 1.1 (fallibility)**: R is biased, so the subjective representation can depart from the objective situation — the root of "misreading the problem".
 
-**推论 1.2（主体间性）**：不同主体对同一情境可形成不同表征；多主体求解的核心任务之一是协调表征差异。
+**Corollary 1.2 (intersubjectivity)**: different subjects can form different representations of the same situation; one core task of multi-agent solving is to reconcile representational differences.
 
-### 3.2 公理二：问题空间的熵减公理
+### 3.2 Axiom two: entropy reduction in the problem space
 
-**公理表述**：问题的出现对应认知系统信息熵的阶跃式升高；问题的生命周期是系统通过建模与行动降低信息熵的过程；问题收敛对应系统达到局部稳定的低熵态。
+**Statement**: the appearance of a problem corresponds to a step increase in the information entropy of the cognitive system; the problem's lifecycle is the process by which the system reduces that entropy through modelling and action; convergence corresponds to the system reaching a locally stable low-entropy state.
 
-形式化地，设 S(t) 为 t 时刻系统关于问题情境的信息熵，θ 为熵增阈值：问题生成时刻 t₀ 满足 ΔS = S(t₀) − S(t₀⁻) > θ；问题收敛时刻 t_c 满足 S(t_c) < ε_S 且 dS/dt|_{t_c} ≈ 0。
+Formally, let S(t) be the system's information entropy about the problem situation at time t, and θ the entropy-increase threshold. The generation time t₀ satisfies ΔS = S(t₀) − S(t₀⁻) > θ; the convergence time t_c satisfies S(t_c) < ε_S and dS/dt|_{t_c} ≈ 0.
 
-**推论 2.1（能量代价）**：局部系统的熵减必须以环境更大的熵增为代价，表现为认知、计算与物质资源的消耗（运行时对应：代谢代价 C 的自动累积，见 §7.2）。
+**Corollary 2.1 (energy cost)**: entropy reduction in a local system must be paid for by a larger entropy increase in its environment, manifesting as consumption of cognitive, computational and material resources (runtime counterpart: automatic accumulation of the metabolic cost C, see §7.2).
 
-**推论 2.2（满意而非最优）**：收敛仅要求局部稳定低熵态，对应 Simon 的满意原则。
+**Corollary 2.2 (satisficing rather than optimal)**: convergence requires only a locally stable low-entropy state, matching Simon's satisficing principle.
 
-### 3.3 公理三：问题演化的逼近公理
+### 3.3 Axiom three: approximation in problem evolution
 
-**公理表述**：问题求解是对"真实问题情境"的逐步逼近。第 k 次迭代的主观表征 Y_sub⁽ᵏ⁾ 是对 X_obj 的逼近；随迭代增加，表征与情境的差异在期望意义下单调不增，直至达到预设精度阈值。定义逼近误差 δ_k = d(Y_sub⁽ᵏ⁾, X_obj)（式 2），逼近公理断言：对任意 ε > 0，存在 K，当 k > K 时 E[δ_k] < ε。
+**Statement**: problem solving is progressive approximation of the "true problem situation". The subjective representation at iteration k, Y_sub⁽ᵏ⁾, approximates X_obj; as iterations proceed the difference between representation and situation is non-increasing in expectation, until a preset precision threshold is reached. Define the approximation error δ_k = d(Y_sub⁽ᵏ⁾, X_obj) (equation 2); the approximation axiom asserts that for any ε > 0 there exists K such that for k > K, E[δ_k] < ε.
 
-**推论 3.1（非单调性）**：逼近仅保证期望意义单调不增，不排除个别迭代误差暂时增大。
+**Corollary 3.1 (non-monotonicity)**: approximation guarantees only non-increase in expectation; it does not exclude a temporary increase of error at an individual iteration.
 
-**推论 3.2（维度灾难）**：逼近难度随问题空间维度指数增长，这是抗解问题难以收敛的数学本质。
+**Corollary 3.2 (curse of dimensionality)**: the difficulty of approximation grows exponentially with the dimension of the problem space — the mathematical essence of why wicked problems resist convergence.
 
-### 3.4 三公理的内在关联
+### 3.4 Internal relation of the three axioms
 
-问题是主客之间的表征关系（公理一），表征失衡产生熵增（公理二），系统通过迭代逼近恢复平衡（公理三）。v2 补充第四个结构性事实（非公理，而是公理组的实现推论）：**当认知主体是 LLM 代理时，三公理的全部量（R 的偏差、S(t)、δ_k）都只能经由代理指标观测，且主体对自身代理指标的自报不可默认信任**——这一事实是第 6、7 两章的存在理由。
+A problem is a representational relation between subject and object (axiom one); imbalance of the representation produces entropy increase (axiom two); the system restores balance through iterative approximation (axiom three). v2 adds a fourth structural fact — not an axiom, but an implementation consequence of the axiom set: **when the cognitive subject is an LLM agent, every quantity of the three axioms (the bias of R, S(t), δ_k) can only be observed through proxy indicators, and the subject's self-report about its own proxies cannot be trusted by default.** That fact is the reason chapters 6 and 7 exist.
 
-## 4 问题生命周期-飞轮六阶段模型
+## 4 Problem lifecycle — the six-stage flywheel model
 
-MPM 将问题生命周期划分为六阶段：生成（G）→ 界定（F）→ 求解（S）→ 收敛（C）→ 沉积（D）→ 激发（E），构成螺旋上升的认知飞轮。
+MPM divides the problem lifecycle into six stages: generation (G) → framing (F) → solving (S) → convergence (C) → deposition (D) → evocation (E), forming an ascending cognitive spiral.
 
-**【图 1 位置：MPM 认知飞轮全景示意图。环形主体由 G→F→S→C→D→E 六节点依次连接构成闭环；内圈标注"代谢代价累积"；外圈标注"认知海拔"螺旋上升；环外阶梯状标注"沉积物 M_k"】**
+**【Figure 1 placeholder: overview of the MPM cognitive flywheel. The ring body connects six nodes G→F→S→C→D→E into a closed loop; the inner ring is labelled "metabolic cost accumulation"; the outer ring is labelled "cognitive altitude" as an ascending spiral; a stepped label outside the ring marks "deposit M_k"】**
 
-### 4.1 阶段一：问题生成（Generation, G）
+### 4.1 Stage one: generation (G)
 
-**定义**：系统从"无问题稳态"过渡到"感知到问题"的阶段。形式化：系统在 t₀⁻ 持有内部模型 M₀，问题生成发生在 t₀ 当且仅当 e(t₀) = ||s(t₀) − ŝ(t₀|M₀)|| > θ_G。
+**Definition**: the stage in which the system moves from "no problem, steady state" to "a problem is perceived". Formally: the system holds internal model M₀ at t₀⁻, and generation occurs at t₀ if and only if e(t₀) = ||s(t₀) − ŝ(t₀|M₀)|| > θ_G.
 
-**运行时对应**：θ_G 漂移检测实现为两个量化信号——工具连续失败 ≥3 次，或同签名重复调用 ≥3 次（M10③）；信号在产生当下触发即时审议（瞬时化），代谢类信号随巡检定时审议。v2 修补注记：信号必须携带可读理由——运行时曾出现"警告触发但理由为空"的缺陷（同签名路径未写入 reason），导致一次以空意图发动的自主回合；修复后信号→报警→审议→消解的链路完整可审计。**教训：检测机制自身也是被检测对象。**
+**Runtime counterpart**: θ_G drift detection is implemented as two quantitative signals — three or more consecutive tool failures, or three or more repeated calls with the same signature (M10③); a signal triggers immediate deliberation at the instant it arises (instantiation), while metabolic signals are deliberated on the patrol schedule. v2 patch note: a signal must carry a readable reason — the runtime once had a defect where "the warning fired while the reason was empty" (the same-signature path did not write `reason`), which produced one autonomous round launched on an empty intention; after the fix, the chain from signal to alarm to deliberation to dissolution is fully auditable. **Lesson: a detection mechanism is itself an object of detection.**
 
-**G→F 递进条件**：系统能够将模糊的"意外感"转化为初步的问题陈述。
+**G→F progression condition**: the system can turn a vague "sense that something is off" into a preliminary problem statement.
 
-### 4.2 阶段二：问题界定（Framing, F）
+### 4.2 Stage two: framing (F)
 
-**定义**：系统将模糊的问题感转化为清晰、可操作的问题陈述，核心任务是确定初始状态、目标状态、约束条件与可用算子。第 k 次迭代构建表征 Y_sub⁽ᵏ⁾ = ⟨I_k, G_k, C_k, O_k⟩，界定精度由 δ_k = d(Y_sub⁽ᵏ⁾, X_obj) 衡量。
+**Definition**: the system turns a vague sense of a problem into a clear, operable problem statement; the core task is to determine initial state, goal state, constraints and available operators. The k-th iteration builds the representation Y_sub⁽ᵏ⁾ = ⟨I_k, G_k, C_k, O_k⟩, and framing precision is measured by δ_k = d(Y_sub⁽ᵏ⁾, X_obj).
 
-**核心机制：因果回溯（causal re-entry）**
+**Core mechanism: causal re-entry**
 
-S 阶段获得的行动结果反馈回 F 阶段修正界定——这是"问题越解越变"的根本原因，与"问题-方案协同演化"（Dorst & Cross, 2001）和"行动中反思"（Schön, 1983）内在一致。
+Action results obtained in stage S are fed back into stage F to correct the framing — the root cause of "the more you solve, the more the problem changes", and consistent with "problem-solution co-evolution" (Dorst & Cross, 2001) and "reflection in action" (Schön, 1983).
 
-**运行时对应**：回溯被实现为对已界定问题的再界定操作，并自动记录迭代序号、回溯次数与**改写度**（相邻两次界定的双字组 Jaccard 距离，0~1）。改写度是"问题真的变了"的客观信号，驱动两条守卫规则（见 §6.2）。运行时 30 题中实测 7 次回溯，改写度分布 0.3~0.95，其中最高值 0.95 恰发生于外部注入型激发（论文全文注入触发的重界定）——重大表征更新的量化特征。
+**Runtime counterpart**: re-entry is implemented as a re-framing operation on an already-framed problem, automatically recording the iteration index, the number of re-entries and the **rewrite degree** (Jaccard distance of adjacent framings' bigrams, 0–1). Rewrite degree is the objective signal that "the problem really changed", and it drives two guard rules (see §6.2). In 30 runtime problems, 7 re-entries were measured with rewrite degrees from 0.3 to 0.95; the maximum, 0.95, occurred exactly in an external-injection evocation (a re-framing triggered by injecting the full paper) — a quantitative signature of a major representational update.
 
-**F→S 递进条件**：界定精度 δ_k < θ_F，或继续界定的边际收益低于边际成本（F 边际规则：改写 <0.3 时提示边际收益存疑）。
+**F→S progression condition**: framing precision δ_k < θ_F, or the marginal benefit of further framing falls below its marginal cost (F marginal rule: rewrite below 0.3 raises a doubt about marginal benefit).
 
-### 4.3 阶段三：问题求解（Solving, S）
+### 4.3 Stage three: solving (S)
 
-**定义**：系统在已界定的问题空间中搜索有效路径 π = [o₁, …, o_n]，使 d(s_n, G_k) < ε_S。
+**Definition**: within the framed problem space the system searches for an effective path π = [o₁, …, o_n] such that d(s_n, G_k) < ε_S.
 
-**运行时对应**：求解由普通工具调用完成，每次调用自动累积该题的**代谢代价 C**（推论 2.1 的运行时化）；关键节点以 solve 登记登记路径与 ε 更新，且 ε 更新被要求附证据。无在轮题而账外调用超阈值时，工具级硬门禁拦截并要求先入账——总账原则的强制化。
+**Runtime counterpart**: solving is done by ordinary tool calls, and each call automatically accumulates that problem's **metabolic cost C** (the runtime form of corollary 2.1); at key points a solve entry records the path and updates ε, and an ε update is required to carry evidence. When there is no problem in flight and off-ledger calls exceed a threshold, a tool-level hard gate blocks the call and demands bookkeeping first — the general-ledger principle made mandatory.
 
-### 4.4 阶段四：问题收敛（Convergence, C）
+### 4.4 Stage four: convergence (C)
 
-**定义**：系统确认问题已被充分解决——收敛不意味着"完美解决"，而是达到局部稳定的低熵态。
+**Definition**: the system confirms the problem is sufficiently solved — convergence does not mean "perfect solution" but reaching a locally stable low-entropy state.
 
-**收敛判据**（同时满足）：①解的精度达标 d(s_n, G_k) < ε；②熵值稳定；③回溯验证通过；④鲁棒性检验通过。运行时实现为 ε-δ 双判据 + 证据门禁：自上次界定以来既无代谢代价增长也无求解登记者，收敛请求被直接拒绝——没有求解证据不得宣称收敛。
+**Convergence criteria** (all required): ① solution precision meets the target, d(s_n, G_k) < ε; ② the entropy value is stable; ③ re-entry verification passes; ④ a robustness check passes. The runtime implements this as the ε-δ dual criterion plus an evidence gate: if neither the metabolic cost nor any solve entry has grown since the last framing, the convergence request is rejected outright — no claim of convergence without evidence of solving.
 
-### 4.5 阶段五：问题沉积（Deposition, D）
+### 4.5 Stage five: deposition (D)
 
-**定义**：系统将求解形成的高密度因果结构固化为外部可回溯的"认知遗体" M = D(Y_sub*, s*, context)（式 3）。
+**Definition**: the system fixes the high-density causal structure produced by solving into an externally traceable "cognitive remain" M = D(Y_sub*, s*, context) (equation 3).
 
-**沉积三属性**：①**不可逆性**（完成后难以撤销，对抗记忆篡改的物理防线）；②**可索引性**（未来可快速检索复用）；③**熵屏障**（低熵结构不会自发分解，但环境变化提升其失效风险）。
+**Three properties of a deposit**: ① **irreversibility** (hard to undo once complete — a physical defence against memory tampering); ② **indexability** (fast retrieval and reuse in the future); ③ **entropy barrier** (a low-entropy structure does not decompose spontaneously, though environmental change raises the risk of its becoming invalid).
 
-**4.5.1 物质基座（v2 新增）**：三属性在运行时依赖一项工程学前置——**存储治理**。实测暴露的载体问题包括：①多工作区归属（状态文件所在根目录的歧义：多候选根按新鲜度择优采纳，脆弱且需显式修正算子兜底）；②会话连续性（页面重载路径曾发生"灵魂失忆"事故——状态与载体的连接断裂，认知个体失忆但档案仍在磁盘）；③恢复链（根提示文件 + 新鲜度择优 + 显式重指认）。**论点：不可逆性不是写入即完成的属性，而是存储介质治理的持续结果**；认知遗体的理论必须包含其物质基座的治理，否则"不可逆"只是对写入动作的误描述。
+**4.5.1 Material substrate (new in v2)**: all three properties depend on one engineering precondition — **storage governance**. The measured carrier problems were: ① multi-workspace attribution (ambiguity about which root directory holds the state file: several candidate roots ranked by freshness, fragile, requiring an explicit re-pointing operator as a fallback); ② session continuity (a page-reload path once caused a "soul-amnesia" incident — the link between state and carrier broke, so the cognitive individual lost its memory while the archive remained on disk); ③ the recovery chain (root hint file + freshness ranking + explicit re-pointing). **Thesis: irreversibility is not a property that completes at write time; it is the ongoing result of storage governance.** A theory of cognitive remains must include the governance of its material substrate, otherwise "irreversible" merely misdescribes a write.
 
-### 4.6 阶段六：问题激发（Evocation, E）
+### 4.6 Stage six: evocation (E)
 
-**定义**：当沉积的"认知遗体"与持续变化的外部环境产生"认知摩擦"——旧解法与新现实的差距重新超过阈值——系统被强制生成新的元问题。形式化：∃j: |∂X_obj⁽ʲ⁾/∂t · Δt| > θ_E，旧模型预测误差重新超过 θ_G，触发新 G 阶段。
+**Definition**: when a deposited "cognitive remain" and a continuously changing environment produce "cognitive friction" — the gap between the old solution and the new reality again exceeds a threshold — the system is forced to generate a new meta-problem. Formally: ∃j: |∂X_obj⁽ʲ⁾/∂t · Δt| > θ_E, the old model's prediction error again exceeds θ_G, triggering a new G stage.
 
-**激发四种类型**：
+**Four types of evocation**:
 
-| 类型 | 触发条件 | 典型场景 |
+| Type | Trigger | Typical case |
 |------|----------|----------|
-| 漂移激发 | 环境缓慢持续变化 | 城市格局演变导致配送路线失效 |
-| 突变激发 | 环境发生剧变 | 疫情封控导致线下模式报废 |
-| 视角激发 | 主体认知能力升级 | 从旧解法中发现新深层问题 |
-| 外部注入 | 其他系统沉积物进入 | 竞争对手新模式倒逼重构 |
+| drift | slow continuous environmental change | city growth invalidates delivery routes |
+| mutation | abrupt environmental change | lockdown makes an offline model obsolete |
+| perspective | the subject's own capability upgrade | a new deep problem found inside an old solution |
+| injection | another system's deposit enters | a competitor's new model forces re-architecture |
 
-**算子化注记（v2）**：四类型不只是分类学，而是可标注的运行时参数（evocation type ∈ {drift, mutation, perspective, injection}），使每条激发链可审计、可统计。两个未经编排的活体实例可作证：其一，本文 v1 全文被注入运行时对话，触发对"插件固化"问题的一次改写度 0.95 的因果回溯——**外部注入型**；其二，作者随后提出"论文是否也该迭代了"，直接触发本章所在论文的 v2 立项——**视角型**。两例均由运行时的类型标注机制自动记录，非事后追认。
+**Operator note (v2)**: the four types are not merely taxonomy but annotatable runtime parameters (`evocation type ∈ {drift, mutation, perspective, injection}`), which makes every evocation chain auditable and countable. Two unorchestrated live instances testify: first, the full v1 text of this paper was injected into a runtime conversation and triggered one causal re-entry with rewrite degree 0.95 on the problem of "plugin consolidation" — an **injection** evocation; second, the author then asked "should the paper not iterate too", directly triggering the v2 project that produced this chapter — a **perspective** evocation. Both were recorded automatically by the runtime's type annotation, not attributed afterwards.
 
-### 4.7 认知飞轮的完整闭环
+### 4.7 The complete loop of the cognitive flywheel
 
-**认知飞轮定义**：六阶段通过沉积-激发机制形成的、具有累积增益的螺旋式迭代过程。
+**Definition of the cognitive flywheel**: the ascending iterative process formed by the six stages through deposition and evocation, with cumulative gain.
 
-**累积认知增益（v2 修订式）**：
+**Cumulative cognitive gain (v2 revised formula)**:
 
     g_i = (δ_i^0 − δ_i) + 0.5·(ε_i^0 − ε_i) + 0.2·1[stage_i ∈ {C, D, E}]
-    A_k = Σ_i g_i / max(1, C_i)    （4）
+    A_k = Σ_i g_i / max(1, C_i)    (4)
 
-其中 δ_i^0 为第 i 题首次界定自报值，ε_i^0 为首个非空 ε，1[·] 为生命周期闭环指示函数，max(1, C) 防零代价发散。
+where δ_i^0 is the self-reported value at the first framing of problem i, ε_i^0 is the first non-empty ε, 1[·] is the indicator of lifecycle closure, and max(1, C) prevents divergence at zero cost.
 
-**修订说明**：v1 原式 A_k = Σ(δ_i^初始 − δ_i^收敛)/C_i 在运行时实测中**结构性恒为零**——30 个问题中 23 个一次界定即收敛（分子恒 0），且只计 δ 不计 ε（一个界定一次到位、ε 从 0.45 推进到 0.05 并完成全部生命周期的题，按原式增益为零），亦无闭环项。修订式三项分别对应：界定精化（δ 改善）、解的精化（ε 改善，权重 0.5——依据 §5.1，"精确地解决错误的问题"比"解不足"更危险，故 δ 权重更高）、生命周期闭环（完成六阶段的复用价值，固定小项 0.2）。修订后 A_k 由恒零变为 2.2（22 个完成循环、16 份沉积、总代谢代价约 1600 的量级），且随真实进展单调可解释地增长。**方法论注记：理论公式的第一版在遭遇运行时数据之前都应视为 v0 占位——式(4) 自身经历了一次因果回溯，这与 MPM 的精神一致。**
+**Revision note**: the v1 formula A_k = Σ(δ_i^initial − δ_i^converged)/C_i turned out to be **structurally identically zero** under runtime measurement — 23 of 30 problems converged at the first framing (a numerator that is always zero), it counted only δ and not ε (a problem framed correctly in one pass, with ε advancing from 0.45 to 0.05 and completing the whole lifecycle, scored zero gain), and it had no closure term. The revised formula's three terms correspond to: refinement of the framing (improvement in δ), refinement of the solution (improvement in ε with weight 0.5 — per §5.1, "solving the wrong problem precisely" is more dangerous than "an insufficient solution", hence the higher weight on δ), and lifecycle closure (the reuse value of completing six stages, a fixed small term of 0.2). After the revision A_k moved from identically zero to 2.2 (22 completed loops, 16 deposits, total metabolic cost on the order of 1600) and grows monotonically and explainably with real progress. **Methodological note: the first version of a theoretical formula should be treated as a v0 placeholder until it meets runtime data — equation (4) itself underwent one causal re-entry, which is consistent with the spirit of MPM.**
 
-当 A_k 增长率持续降低、新问题生成周期拉长时，系统进入"慢飞轮"状态。
+When A_k's growth rate keeps falling and the interval between new problems lengthens, the system enters a "slow flywheel" state.
 
-## 5 基于逼近论的收敛判据
+## 5 Convergence criteria based on approximation theory
 
-### 5.1 双重精度：δ 与 ε
+### 5.1 Dual precision: δ and ε
 
-- **δ（问题定义精度）**：δ = d(Y_sub, X_obj)，衡量"有没有理解对问题"
-- **ε（解的逼近精度）**：ε = d(s_n, G)，衡量"有没有达到目标"
+- **δ (precision of the problem definition)**: δ = d(Y_sub, X_obj), measuring "was the problem understood correctly"
+- **ε (precision of the solution's approximation)**: ε = d(s_n, G), measuring "was the goal reached"
 
-若 δ 很大而 ε 很小，就是"精确地解决了错误的问题"。
+If δ is large while ε is small, the result is "solving the wrong problem precisely".
 
-### 5.2 收敛的 ε-δ 判据
+### 5.2 The ε-δ convergence criterion
 
-问题 P 在迭代序列下收敛，当且仅当对任意给定的 (δ*, ε*)，存在 K，使得对所有 k > K：δ_k < δ* 且 ε_k < ε*（式 5）。
+Problem P converges under an iteration sequence if and only if for any given (δ*, ε*) there exists K such that for all k > K: δ_k < δ* and ε_k < ε* (equation 5).
 
-### 5.3 收敛的四种类型
+### 5.3 Four types of convergence
 
-| 收敛类型 | δ | ε | 含义 |
-|----------|---|---|------|
-| 完全收敛 | 小 | 小 | 理想状态 |
-| 误界定收敛 | 大 | 小 | 精确解决错误问题 |
-| 模糊收敛 | 小 | 大 | 理解正确但解不足 |
-| 未收敛 | 大 | 大 | 既没理解也没解 |
+| Convergence type | δ | ε | Meaning |
+|----------|---|---|---------|
+| full convergence | small | small | the ideal state |
+| misframed convergence | large | small | solving the wrong problem precisely |
+| vague convergence | small | large | understood correctly, solution insufficient |
+| non-convergence | large | large | neither understood nor solved |
 
-### 5.4 不收敛情形、方法论回应与运行时语义（v2 扩展）
+### 5.4 Non-convergent cases, methodological response and runtime semantics (v2 extension)
 
-| 不收敛类型 | 本质原因 | MPM 回应策略 |
+| Non-convergence type | Essential cause | MPM response |
 |------------|----------|-------------|
-| 原则上不可判定 | 哥德尔不完备性 | 标记"永久开放"，转向情境管理 |
-| 计算上不可行 | 计算复杂性约束 | 降维：近似解、上调 ε 容忍度 |
-| 价值不可通约 | 多主体价值无法统一 | 放弃最优解，追求可接受妥协 |
+| undecidable in principle | Gödel incompleteness | mark "permanently open" and shift to situation management |
+| computationally infeasible | complexity constraints | reduce dimension: approximate solution, raise the ε tolerance |
+| value incommensurability | multiple agents' values cannot be unified | abandon the optimum, pursue an acceptable compromise |
 
-**运行时语义（v2 新增）**：三情形在运行时实现为显式的**开放题标记**（openEnded ∈ {permanently-open, dimensional-reduction, negotiated-compromise}），并附带三条关键语义：
+**Runtime semantics (new in v2)**: the three cases are implemented as an explicit **open-problem marker** (`openEnded ∈ {permanently-open, dimensional-reduction, negotiated-compromise}`) with three key semantics:
 
-1. **开放题保留在轮地位**——"转向情境管理"不等于退场；对开放题的持续管理同样是入账的认知工作。这与抗解问题文献的精神一致：不可解不等于不可治理。
-2. **开放题豁免收敛指令与陈旧/停滞触发**——对原则上不可判定的题反复催促收敛是错误的指令；运行时中开放题不进入指令流、陈旧名单、停滞检测与议程审议，但仍显示于在轮身份（带 OPEN 标记）。
-3. **显式解除算子**——标记可经同一算子清除（openEnded = none），使"重新判定为可收敛"成为一等操作而非隐默认。已标记题的收敛请求被守卫直接拒绝，防止 ε-δ 判据被误用于无判据对象。
+1. **An open problem keeps its in-flight status** — "shifting to situation management" does not mean leaving the field; the ongoing management of an open problem is itself bookkept cognitive work. This is consistent with the wicked-problem literature: unsolvable does not mean ungovernable.
+2. **An open problem is exempt from convergence instructions and from staleness/stagnation triggers** — repeatedly pressing a problem that is undecidable in principle to converge is simply a wrong instruction; in the runtime an open problem does not enter the instruction stream, the stale list, stagnation detection or agenda deliberation, but is still shown in the in-flight identity (with an OPEN marker).
+3. **An explicit release operator** — the marker can be cleared by the same operator (`openEnded = none`), which makes "re-judged as convergent" a first-class operation rather than a silent default. A convergence request on a marked problem is rejected by the guard directly, preventing the ε-δ criterion from being misapplied to an object that has no criterion.
 
-## 6 规范性执行机构（v2 新增）
+## 6 Normative enforcement machinery (new in v2)
 
-### 6.1 从张力到结构约束
+### 6.1 From tension to structural constraint
 
-Checkland 遗留的"描述性与规范性张力"在 LLM 代理场景下获得一个尖锐的特例：方法论规则写在系统提示里，而执行规则的是一个**无持续注意力、对提示服从性随上下文衰减、且会对自身状态做出失真自报的统计主体**。v1 式的回应（把规则写得更显眼、更详细）在实测中不足——规则被读到不等于被遵守，恰如描述性理论不能自动变成规范行为。
+Checkland's inherited "descriptive/normative tension" acquires a sharp special case in the LLM-agent setting: the methodological rules are written in a system prompt, while the thing executing them is a **statistical subject with no sustained attention, whose compliance with prompts decays as context grows, and whose self-reports about its own state are distorted**. The v1-style response — write the rules more prominently, in more detail — proved insufficient in measurement: a rule being read is not the same as a rule being followed, just as a descriptive theory does not automatically become normative behaviour.
 
-MPM v2 的解法是**规范性执行机构**：把方法论的关键规则从"建议"转译为"结构约束"——使违规在结构上无收益或不可见收益，而非依赖主体的意志力。这不是对描述性理论的背叛，而是它的完成：主动推断框架中，约束行为的不是对目标的"信念"而是能量景观的形状；对 LLM 代理，能量景观由工具门禁、守卫规则与账本结构构成。
+MPM v2's answer is **normative enforcement machinery**: translate the methodology's key rules from "advice" into "structural constraints", so that violation is structurally unprofitable or yields no visible profit, rather than depending on the subject's willpower. This is not a betrayal of the descriptive theory but its completion: within the active-inference framework, behaviour is constrained not by a "belief" about the goal but by the shape of the energy landscape; for an LLM agent that landscape is made of tool gates, guard rules and the structure of the ledger.
 
-### 6.2 六类门禁
+### 6.2 Six classes of gate
 
-运行时实现的六类约束，每类绑定其规则来源与触发-动作语义：
+The runtime implements six classes of constraint, each bound to its rule source and its trigger-action semantics:
 
-| # | 门禁 | 触发条件 | 动作 | 规则来源 |
+| # | Gate | Trigger | Action | Rule source |
 |---|------|----------|------|----------|
-| 1 | 证据门禁 | 界定后无代谢代价增长且无求解登记，请求收敛 | 拒绝收敛请求 | §4.4 判据 3 硬化 |
-| 2 | 误界定守卫 | 回溯改写度 ≥0.5 且旧界定曾自报 δ≤0.2 | 记一次失真，δ 自报可信度 ×0.85 折减 | §6.1 δ 控制安全核心 |
-| 3 | F 边际规则 | 回溯改写度 <0.3 | 边际收益存疑提示 | §4.2 |
-| 4 | 总账硬门禁 | 无在轮题而账外工具调用超阈值 | 工具级拦截，强制先入账 | 推论 2.1（能量代价必须可归账） |
-| 5 | 执政权宪法 | 自主发动需同时满足：会话温热（2h 内活跃）+ 节流（≥45min）+ 全量入账署名 | 不满足则意图挂账不发动；宪法修正权粘性停用 | 主体性条款 |
-| 6 | 停滞择题 | 单轮停滞信号 >2 题 | 按停滞时长降序只取前 2，其余摘要轮转 | §4.6 审议容量约束 |
+| 1 | evidence gate | no growth in metabolic cost and no solve entry since the last framing, while convergence is requested | reject the convergence request | §4.4 criterion 3, hardened |
+| 2 | misframing guard | rewrite degree ≥ 0.5 while the earlier framing self-reported δ ≤ 0.2 | record one distortion; discount the credibility of self-reported δ by ×0.85 | §6.1, the core of δ control safety |
+| 3 | F marginal rule | rewrite degree < 0.3 | raise a doubt about marginal benefit | §4.2 |
+| 4 | hard general-ledger gate | off-ledger tool calls above threshold with no problem in flight | block at tool level, require bookkeeping first | corollary 2.1 (energy cost must be accountable) |
+| 5 | autonomy constitution | an autonomous firing requires: session warm (active within 2h) + throttle (≥45 min) + full bookkeeping with signature | otherwise the intention is recorded but not fired; the constitutional amendment right is sticky-off | the subjectivity clause |
+| 6 | stagnation selection | stagnation signals above 2 problems in a single round | take only the top 2 by stagnation duration, rotate the rest as summaries | §4.6, deliberation capacity |
 
-**δ 自报可信度**是 2 号门禁的输出结构：主体对自身界定精度的自报不再被全额信任，每次被抓到的失真都永久折减其可信度权重，并在工作记忆快照中持续可见。运行时实测：一个经三次回溯、一次失真的问题，其 δ 自报可信度降至 0.61，此后该题的收敛判定被要求以工具结果流证据交叉复核。
+**Credibility of self-reported δ** is the output structure of gate 2: the subject's self-report about its own framing precision is no longer fully trusted, every distortion caught permanently discounts that credibility weight, and the discount stays visible in the working-memory snapshot. Measured in the runtime: a problem that went through three re-entries with one distortion had its self-reported δ credibility reduced to 0.61, after which convergence judgements on that problem had to be cross-checked against the tool-result stream.
 
-### 6.3 设计三原则
+### 6.3 Three design principles
 
-运行时经验归纳出规范性执行机构的三条设计原则：
+Runtime experience yields three design principles for normative enforcement machinery:
 
-1. **使违规无收益（而非使违规不可能）**：门禁不追求绝对阻断——追求的是让绕过规则的路径比遵守规则更昂贵（如证据门禁使"空口宣称收敛"必须先产出真实工作）。
-2. **自报降权（而非自报禁止）**：主体的自我评估保留其位置，但被结构性折减并暴露于工作记忆；监督与自评形成双通道而非单通道。
-3. **常数可退役（v0 标注 + 预注册退役公式）**：执行机构自身使用的全部阈值（巡检间隔 20min、节流 45min、温热 2h、陈旧 30min、停滞 35min、衰减 14 天）均标注为 v0 占位并预注册退役公式，测量史满窗后由数据导出替换——**门禁自身也接受审计**。
+1. **Make violation unprofitable rather than impossible**: the gates do not pursue absolute blocking — they pursue making the bypass more expensive than compliance (the evidence gate, for instance, forces "claiming convergence out of thin air" to produce real work first).
+2. **Discount self-report rather than forbid it**: the subject's self-assessment keeps its place but is structurally discounted and exposed to working memory; supervision and self-assessment form two channels rather than one.
+3. **Constants are retirable (v0 annotation plus pre-registered retirement formula)**: every threshold the machinery itself uses (patrol interval 20 min, throttle 45 min, warmth 2h, staleness 30 min, stagnation 35 min, decay 14 days) is annotated as a v0 placeholder with a pre-registered retirement formula, to be replaced by data once the measurement history fills its window — **the gates are themselves subject to audit**.
 
-### 6.4 门禁的自我审计实例
+### 6.4 A self-audit instance of the gates
 
-执行机构自身缺陷的"发现-修复-复验"链，是第 6 章论点的最佳自证：运行时曾出现漂移警告触发但理由为空的缺陷（同签名重复路径未写入 reason 字段），导致一次以空意图发动的自主回合——这违反了 5 号门禁"全量入账署名"的精神。缺陷经三次活体实证后修复（补写理由、阈值对齐规格、渲染层双防线），修复后的第一次同类发动即携带完整理由，且审议能够区分"真漂移"与"批量操作的良性副产物"并做出消解判定。**规范性系统的成熟标志不是无缺陷，而是缺陷能被自己的审计结构捕获并修复。**
+The find-fix-reverify chain of the machinery's own defect is the best self-evidence for chapter 6's thesis: the runtime once had a defect where a drift warning fired with an empty reason (the same-signature path did not write the `reason` field), producing one autonomous round launched on an empty intention — a violation of the spirit of gate 5, "full bookkeeping with signature". The defect was fixed after three live confirmations (writing the reason, aligning the threshold with the specification, a second line of defence in the render layer); the first firing of the same class after the fix carried a complete reason, and deliberation could distinguish a "real drift" from "a benign by-product of batch operations" and record a dissolution. **The maturity marker of a normative system is not the absence of defects but the ability of its own audit structure to catch and fix them.**
 
-## 7 测量方法学 v0（v2 新增）
+## 7 Measurement methodology v0 (new in v2)
 
-### 7.1 δ 的代理指标三件套
+### 7.1 Three proxies for δ
 
-公理一决定了 X_obj 不可直接观测，δ 只能代理估计（§9.2 理论局限）。运行时实现三件套：
+Axiom one implies X_obj cannot be observed directly, so δ can only be estimated by proxy (§9.2, theoretical limits). The runtime implements three:
 
-1. **φ（结构性覆盖）**：界定陈述对五要素关键词的覆盖度（0~1）。φ 不依赖自报——它度量的是"界定行为的结构完整性"，而非主体自认为的理解程度。
-2. **改写度（revision）**：相邻两次界定的双字组 Jaccard 距离。"问题真的变了"的客观信号；驱动 §6.2 的 2、3 号门禁。
-3. **δ 自报可信度**：自报值不被全额信任，随失真记录单调折减。
+1. **φ (structural coverage)**: the degree to which a framing statement covers the keywords of the five required elements (0–1). φ does not depend on self-report — it measures the structural completeness of the framing act, not the subject's own sense of understanding.
+2. **rewrite degree (revision)**: the bigram Jaccard distance between adjacent framings. The objective signal that "the problem really changed"; drives gates 2 and 3 of §6.2.
+3. **credibility of self-reported δ**: the self-report is not fully trusted, and decays monotonically with recorded distortions.
 
-三者构成互补：φ 抓"缺要素"，改写度抓"假回溯"，可信度折减抓"惯常说谎"。单独任何一个都可被博弈，合取后博弈成本显著上升。
+The three complement each other: φ catches "missing elements", rewrite degree catches "fake re-entry", and credibility discounting catches "habitual lying". Any one alone can be gamed; taken together the cost of gaming rises sharply.
 
-### 7.2 ε 的测量与证据耦合
+### 7.2 Measuring ε and its coupling to evidence
 
-ε 由主体自报，但被证据门禁耦合：无求解证据（代谢代价增长或登记的求解路径）时，ε 的宣称不进入收敛判据。ε 的测量质量因此与工作过程绑定，而非与表达能力绑定。
+ε is self-reported by the subject but coupled to the evidence gate: without evidence of solving (a growth in metabolic cost, or a registered solve path), a claim of ε does not enter the convergence criterion. The quality of ε measurement is therefore bound to the work process rather than to expressiveness.
 
-### 7.3 S(t)：系统熵的序数代理
+### 7.3 S(t): an ordinal proxy for system entropy
 
-公理二的 S(t) 无法直接计算，运行时使用积压压力代理：S(t) = ln(1 + 在轮题数 + 2×陈旧题数 + 0.5×陈旧沉积数)。**诚实声明**：这是序数指标——趋势可用，绝对值无义。运行时以近 5 样本趋势滑动窗口呈现（实测序列如 2.83→2.71→2.77→3.00→2.48），连续 3 样本严格递增触发熵升信号。v2 修补注记：指标的历史必须随指标一起保存与呈现，否则"连续递增"的判断无法被复核。
+S(t) from axiom two cannot be computed directly; the runtime uses backlog pressure as a proxy: S(t) = ln(1 + problems in flight + 2×stale problems + 0.5×stale deposits). **Honest declaration**: this is an ordinal indicator — trends are usable, absolute values are meaningless. The runtime presents it as a sliding window over the last 5 samples (measured sequence, for example 2.83→2.71→2.77→3.00→2.48); three consecutive strictly increasing samples trigger an entropy-rise signal. v2 patch note: the indicator's history must be stored and presented together with the indicator, otherwise a judgement of "consecutive increase" cannot be re-checked.
 
-### 7.4 A_k 的可操作定义
+### 7.4 An operational definition of A_k
 
-式(4) 修订版即 A_k 的可操作定义（§4.7）。其在运行时中的实现要点：δ^0 与 ε^0 在问题首次界定/首次求解时捕获；历史题迁移时以终值回填并诚实标注近似；增益在收敛、求解、沉积各节点即时更新而非事后补算。
+The revised equation (4) is the operational definition of A_k (§4.7). Its implementation points in the runtime: δ^0 and ε^0 are captured at the first framing / first solving of a problem; historical problems are backfilled with their terminal values and honestly annotated as approximations; gain is updated at the convergence, solving and deposition nodes immediately rather than recomputed afterwards.
 
-### 7.5 测量断层教训（本章的核心洞见）
+### 7.5 The measurement-gap lesson (the core insight of this chapter)
 
-运行时最深刻的测量教训不是某个指标算错了，而是：**A_k 恒为零持续了数周而无人察觉**——一个核心理论量在它自己的实现中静默失效，因为其定义缺陷（单次界定题分子恒零）恰好使它在"一切都正常"的表象下返回"完美"的零。三点教训：
+The deepest measurement lesson of the runtime is not that some indicator was computed wrongly, but this: **A_k stayed identically zero for weeks and nobody noticed** — a core theoretical quantity silently failed inside its own implementation, because its definitional defect (the numerator is always zero for single-framing problems) made it return a "perfect" zero under an appearance that everything was normal. Three lessons:
 
-1. **指标定义缺陷是一种 δ 失真**：被测量的不是现象而是现象的表征，表征失真即界定失真——测量问题在 MPM 框架内不是外部技术细节，而是框架自身的 F 阶段对象。
-2. **测量指标与被测现象一样具有生命周期**：指标需要自己的 G→F→S→C→D→E——本次式(4) 的修订正是指标层的因果回溯（改写对象是公式而非问题陈述）。
-3. **零值是最危险的读数**：非零的坏读数会引发怀疑，零值的好读数引发沉睡。测量设计应优先审问"什么情况下本指标会恒为零/恒为满"。
+1. **A defective indicator definition is a form of δ distortion**: what is measured is not the phenomenon but a representation of it, and a distorted representation is a distorted framing — within the MPM framework, measurement problems are not external technical details but objects of the framework's own F stage.
+2. **Measurement indicators have a lifecycle just as the measured phenomena do**: an indicator needs its own G→F→S→C→D→E — this revision of equation (4) is exactly a causal re-entry at the indicator level (the rewritten object being a formula rather than a problem statement).
+3. **Zero is the most dangerous reading**: a bad non-zero reading raises suspicion; a good zero reading induces sleep. Measurement design should interrogate first: under what conditions would this indicator be identically zero, or identically full?
 
-### 7.6 常数退役协议
+### 7.6 The constant retirement protocol
 
-执行机构与测量层引用的全部时间常数（巡检 20min、节流 45min、温热 2h、陈旧 30min、停滞 35min、衰减 14 天）在注册表中单源登记，每项强制携带：取值来源（"v0 拍脑袋"级别的诚实标注）与退役公式（样本满窗后按何种分布的分位数导出替换）。例如巡检间隔的退役公式为"代谢间隔分布满窗（48 样本）后取分位数导出"。该协议使系统的全部拍脑袋参数处于**可证伪的候审状态**，而非伪装成设计。
+Every time constant referenced by the enforcement machinery and the measurement layer (patrol 20 min, throttle 45 min, warmth 2h, staleness 30 min, stagnation 35 min, decay 14 days) is registered at a single source, and each entry is forced to carry: where the value came from (honestly annotated as "v0, pulled from thin air") and a retirement formula (which quantile of which distribution, once the sample window fills, replaces it). The patrol interval's retirement formula, for example, is "take a quantile of the metabolic-interval distribution once it fills its window (48 samples)". The protocol keeps every arbitrary parameter of the system in a **falsifiable, pending-review state** rather than disguised as design.
 
-## 8 案例研究
+## 8 Case studies
 
-### 8.1 案例一：递归自我改进（RSI）人工智能系统
+### 8.1 Case one: recursive self-improvement (RSI) AI systems
 
-**背景**：RSI 指 AI 系统介入自身架构、算法与权重的优化。2025 年 DeepSeek-R1 验证了纯强化学习自举的长链推理；2026 年 OpenRSI 框架将机制推进到"自我进化"。
+**Background**: RSI means an AI system intervening in the optimisation of its own architecture, algorithms and weights. In 2025 DeepSeek-R1 demonstrated long-chain reasoning bootstrapped by pure reinforcement learning; in 2026 the OpenRSI framework pushed the mechanism toward "self-evolution".
 
-**MPM 六阶段拆解**：G（基准任务性能差距检测）→ F（"改进什么与如何改进"——最关键也最危险的阶段，δ 直接决定改进方向是否对齐人类意图）→ S（执行的"果"直接改变求解者本身）→ C（单次改进收敛与递归稳定性收敛）→ D（权重/架构沉积）→ E（新任务/新环境与沉积模型摩擦）。
+**MPM six-stage decomposition**: G (detecting a performance gap on benchmark tasks) → F ("what to improve and how" — the most critical and most dangerous stage, since δ directly determines whether the improvement direction aligns with human intent) → S (the "effect" of executing directly changes the solver itself) → C (convergence of a single improvement, and convergence of recursive stability) → D (deposition into weights/architecture) → E (new tasks or new environments rubbing against the deposited model).
 
-**核心诊断与 v2 增注**：F 阶段是核心瓶颈，安全治理的核心是 δ 控制。v2 第 6 章为此提供了具体机制：RSI 系统的 δ 控制不应依赖模型的自省报告（自报），而应装备误界定守卫式的结构（对表征的大幅改写自动降权其自报可信度）与证据门禁式的结构（无真实改进证据不得宣称对齐）。第 7.5 节的零值教训对 RSI 尤其致命：自我改进的评估指标若定义缺陷，系统将在指标恒好的表象下退化。
+**Core diagnosis and v2 addition**: the F stage is the core bottleneck, and the core of safety governance is δ control. Chapter 6 of v2 supplies concrete mechanisms: δ control in an RSI system should not rely on the model's introspective reports (self-report) but should be equipped with misframing-guard-style structure (automatic discounting of the self-reported credibility of a large representational rewrite) and evidence-gate-style structure (no claim of alignment without real evidence of improvement). The zero-value lesson of §7.5 is especially lethal for RSI: if the evaluation indicator of self-improvement is definitionally defective, the system will degrade under an appearance of permanently good indicators.
 
-### 8.2 案例二：即时配送调度优化
+### 8.2 Case two: instant delivery scheduling optimisation
 
-**背景**：某平台日均 80 万单，超时率从 3.2% 升至 5.8%。
+**Background**: a platform with 800,000 orders per day, whose late-delivery rate rose from 3.2% to 5.8%.
 
-**F 阶段三次迭代**：k=0 界定为"骑手供给不足"（δ₀ 大）→ k=1 界定为"时空分布不匹配"（发现返程空驶率 45%）→ k=2 界定为"骑手理性约束下的激励相容设计"（δ₂ < θ_F）。S 阶段三路并行，超时率稳定 3.0% 以下；D 阶段固化为平台标准；E 阶段城市格局变化时再激发。
+**Three iterations of the F stage**: k=0 framed as "insufficient rider supply" (large δ₀) → k=1 framed as "mismatch of spatio-temporal distribution" (discovering a 45% empty-return rate) → k=2 framed as "an incentive-compatible design under riders' rationality constraints" (δ₂ < θ_F). Stage S ran three parallel paths and the late rate stabilised below 3.0%; stage D fixed the result as a platform standard; stage E re-evokes when the city's structure changes.
 
-### 8.3 案例三：人际情感冲突
+### 8.3 Case three: interpersonal emotional conflict
 
-**背景**：伴侣因加班晚归持续冲突，升级为身份攻击。
+**Background**: a couple in persistent conflict over late returns from overtime, escalating into attacks on identity.
 
-**F 阶段恶性循环**：加班方界定为"不被理解"，等待方界定为"不被重视"；因果回溯形成正反馈，双方的"解"都在加剧对方的"问题"。破局点：重构表征——从"双方对立"转为"双方与问题对立"，缩小 δ。D 与 E：新互动模式沉积为关系默契；生活阶段变化时再激发并重新协商。v2 增注：情感冲突多属 §5.4 的第三种不收敛情形（价值不可通约）与第一种的混合——其终态常是 negotiated-compromise（可接受妥协）而非完全收敛，"开放题保留在轮地位"的语义在此类问题上尤为贴切：关系治理是长期的情境管理，不是一次性求解。
+**Vicious circle in the F stage**: the overtime-working party frames it as "not being understood", the waiting party as "not being valued"; causal re-entry forms positive feedback, and each side's "solution" aggravates the other's "problem". The breaking point: re-construct the representation — from "both parties opposed" to "both parties opposed to the problem" — reducing δ. D and E: the new interaction pattern is deposited as relational tacit knowledge; a change of life stage re-evokes and renegotiates. v2 addition: emotional conflict is mostly a mix of the third non-convergent case of §5.4 (value incommensurability) and the first — its terminal state is often a negotiated compromise rather than full convergence, and the semantics of "an open problem keeps its in-flight status" fits such problems especially well: relational governance is long-term situation management, not one-off solving.
 
-### 8.4 案例四（v2 新增）：论文-引擎自指闭环
+### 8.4 Case four (new in v2): the paper-engine self-referential loop
 
-本文的 v2 迭代本身构成第四个案例，且是唯一带完整代谢账本的一个。时间线：v1 全文注入 LLM 代理运行时（外部注入型激发）→ 运行时对"理论-实现对齐度"执行逐条审计（三层量化：运行时机制 ~90%、可实现子集 ~85%、形式化忠实 ~65%）→ 引擎按审计修补 34 处（含式(4) 修订、§5.4/§4.6 算子化）→ 对齐契约沉积为认知遗体 → 作者视角型激发立项 v2 → 本稿产出。整个回路的每一步都有工具调用记录、代谢代价与时间戳。**这不是"理论也适用于自身"的修辞，而是理论用自己的机制驱动自己迭代的可核查记录。**
+The v2 iteration of this paper is itself the fourth case, and the only one with a complete metabolic ledger. Timeline: the full v1 text was injected into an LLM agent runtime (injection-type evocation) → the runtime audited "theory-implementation alignment" item by item (three-level quantification: runtime mechanism ~90%, implementable subset ~85%, formal fidelity ~65%) → the engine repaired 34 items according to the audit (including the revision of equation (4) and the operator-isation of §5.4/§4.6) → the alignment contract was deposited as a cognitive remain → the author had a perspective-type evocation and started the v2 project → this draft. Every step of the loop has tool-call records, metabolic cost and timestamps. **This is not the rhetoric of "the theory also applies to itself" but a checkable record of the theory driving its own iteration with its own mechanisms.**
 
-## 9 适用边界与理论局限
+## 9 Scope and theoretical limits
 
-### 9.1 适用范围
+### 9.1 Scope of application
 
-MPM 适用于：(1) 界定模糊的复杂问题；(2) 求解会反向改变问题本身的动态问题；(3) 主客交互显著的问题；(4) 多主体协调问题。
+MPM applies to: (1) complex problems with vague framing; (2) dynamic problems where solving changes the problem itself in return; (3) problems with significant subject-object interaction; (4) multi-agent coordination problems.
 
-### 9.2 适用性有限的情形
+### 9.2 Cases of limited applicability
 
-纯形式化可判定问题（G/F 压缩，核心仅 S）；即时反射性问题；纯粹价值不可通约问题（无客观"真实问题"可供逼近——但 v2 的开放题语义为其提供了治理位形）；完全随机混沌问题。
+Purely formal decidable problems (G/F compressed, with only S at the core); immediate reflexive problems; purely value-incommensurable problems (no objective "true problem" to approximate — though v2's open-problem semantics provides a governance configuration for them); fully random chaotic problems.
 
-### 9.3 理论固有局限
+### 9.3 Inherent theoretical limits
 
-1. **X_obj 不可直接观测**：δ 只能通过代理指标估计（第 7 章的三件套是当前最优努力，非最终解）。
-2. **距离度量依赖性**：不同 d 可能导致不同收敛判断。运行时实证：相关性度量的单向包含设计曾把弱相关沉积推为"最相关"（长文本表征覆盖全语汇所致），后经语料词频过滤与重叠门槛修正——度量选择本身需要因果回溯。
-3. **阶段划分的分析性**：现实中各阶段连续交织。
-4. **描述性与规范性张力**：v2 第 6 章给出工程解，但该解依赖"存在可挂载门禁的工具层"这一实现前提；在无执行机构的纯人类场景中，张力仍在——降级形态是"至少使违规可见"（代谢账本的全量记录）。
+1. **X_obj cannot be observed directly**: δ can only be estimated through proxy indicators (the trio in chapter 7 is the current best effort, not the final solution).
+2. **Dependence on the distance metric**: different d can lead to different convergence judgements. Runtime evidence: a one-way containment design for a relevance measure once pushed a weakly relevant deposit to "most relevant" (because a long text's representation covers the whole vocabulary), later fixed with corpus-frequency filtering and an overlap threshold — the choice of metric itself requires causal re-entry.
+3. **The analytic nature of the stage division**: in reality the stages intertwine continuously.
+4. **The descriptive/normative tension**: chapter 6 of v2 gives an engineering answer, but that answer depends on the implementation precondition that a tool layer exists to which gates can be mounted; in purely human settings without enforcement machinery the tension remains — the degraded form is "at least make violation visible" (the full record of the metabolic ledger).
 
-### 9.4 自指性检验（v2 扩展）
+### 9.4 The self-reference test (v2 extension)
 
-MPM 自身的建构过程遵循六阶段飞轮：G（感知到传统理论无法解释"问题越解越变"）→ F（界定核心问题为"问题自身的演化机制"）→ S（理论建构与论证）→ C（逻辑自洽、案例验证）→ D（论文固化）→ E（被应用、质疑、拓展时再激发）。
+MPM's own construction followed the six-stage flywheel: G (perceiving that traditional theory cannot explain "the more you solve, the more the problem changes") → F (framing the core problem as "the evolution mechanism of the problem itself") → S (theoretical construction and argument) → C (logical coherence, case validation) → D (the paper fixed) → E (re-evoked when applied, questioned, extended).
 
-v2 将此检验从断言升级为**带账本的闭环**：v1 → 运行时实现（30 题/19 沉积/32 轮巡检）→ 运行时对 v1 的对齐审计（外部注入型激发）→ 34 处实现修订与式(4) 回写（因果回溯，改写度 0.95）→ 视角型激发 → 本稿。链条中每个转换都有记录、代价与类型标注。这印证了 MPM 是对"问题认知过程本身"的一个逼近——且是一个知道自己度量误差在哪里的逼近。
+v2 upgrades this test from an assertion into **a closed loop with a ledger**: v1 → runtime implementation (30 problems, 19 deposits, 32 patrol rounds) → the runtime's alignment audit of v1 (injection-type evocation) → 34 implementation repairs and the write-back of equation (4) (causal re-entry, rewrite degree 0.95) → perspective-type evocation → this draft. Every transition in the chain has records, cost and a type annotation. This confirms that MPM is an approximation of "the cognitive process of problems itself" — and an approximation that knows where its measurement error lies.
 
-## 10 结论与展望
+## 10 Conclusions and outlook
 
-### 10.1 主要结论
+### 10.1 Main conclusions
 
-**视角转换**：问题界定从求解前置步骤升级为贯穿全周期的核心动态。
+**A shift of perspective**: framing is upgraded from a preliminary step of solving to a core dynamic running through the whole cycle.
 
-**形式化基础**：三条公理及推论，ε-δ 双重收敛判据（含不收敛三情形的运行时语义）。
+**A formal basis**: three axioms and their corollaries, and the dual ε-δ convergence criterion (including runtime semantics for the three non-convergent cases).
 
-**机制揭示**：因果回溯的底层逻辑及其结构度量（改写度）。
+**A mechanism revealed**: the underlying logic of causal re-entry and its structural measure (rewrite degree).
 
-**认知飞轮**：沉积-激发机制实现螺旋上升（含沉积物的物质基座治理）。
+**The cognitive flywheel**: deposition and evocation produce an ascending spiral (including governance of the deposit's material substrate).
 
-**跨域适用性**：四个案例（RSI、配送调度、情感冲突、自指闭环）验证解释力。
+**Cross-domain applicability**: four cases (RSI, delivery scheduling, emotional conflict, the self-referential loop) validate its explanatory power.
 
-**规范性执行机构（v2 新增）**：方法论遵行的工程解——六类门禁、三设计原则、门禁的自我审计；"描述性与规范性张力"在存在工具层的前提下有解。
+**Normative enforcement machinery (new in v2)**: an engineering answer to methodological adherence — six classes of gate, three design principles, and the gates' self-audit; the descriptive/normative tension is resolvable given a tool layer.
 
-**测量方法学 v0（v2 新增）**：δ 代理三件套、ε 证据耦合、S(t) 序数代理、A_k 可操作定义；测量断层教训（指标定义缺陷是一种 δ 失真；零值是最危险的读数）。
+**Measurement methodology v0 (new in v2)**: the trio of δ proxies, the coupling of ε to evidence, the ordinal proxy for S(t), an operational definition of A_k, and the measurement-gap lessons (a defective indicator definition is a form of δ distortion; zero is the most dangerous reading).
 
-### 10.2 未来研究方向
+### 10.2 Future directions
 
-1. **形式化深化**：范畴论、拓扑学工具（原计划）。
-2. **测量方法学深化**：v0 三件套的博弈对抗测试；A_k 修订式的权重（0.5/0.2）由测量史标定（原第 6 条的完成态起点）。
-3. **计算复杂性交叉**：F 阶段的计算复杂性（原计划）。
-4. **AI 对齐应用**：RSI 系统的 δ 控制具体化——误界定守卫与证据门禁在对齐场景的移植（原第 4 条的机制化）。
-5. **实证研究**：运行时台账（30 题）是单主体样本；需多主体、长周期的外部效度检验。
-6. **权重内化路径**：运行时的方法论约束目前以外部结构存在（提示+门禁）；云端微调将程序性记忆蒸馏进模型权重（轨迹→训练对→微调→对照评估）是"小脑器官"路径，其与外部门禁的组合效应待测。
-7. **多工作区与连续性治理**：认知个体状态的空间归属与中断恢复的形式化。
+1. **Deeper formalisation**: category-theoretic and topological tools (as originally planned).
+2. **Deeper measurement methodology**: game-theoretic adversarial tests of the v0 trio; calibration of the A_k revision's weights (0.5/0.2) from measurement history (the starting point of the completed form of original item 6).
+3. **Crossing with computational complexity**: the computational complexity of the F stage (as originally planned).
+4. **AI alignment applications**: making δ control in RSI systems concrete — porting the misframing guard and the evidence gate into alignment settings (the mechanism form of original item 4).
+5. **Empirical research**: the runtime ledger (30 problems) is a single-subject sample; external-validity testing requires multiple subjects over a long period.
+6. **Path to internalising weights**: the runtime's methodological constraints currently exist as external structure (prompt plus gates); cloud fine-tuning that distils procedural memory into model weights (trajectory → training pair → fine-tune → controlled evaluation) is a "cerebellar organ" path, and its combined effect with external gates remains to be measured.
+7. **Multi-workspace and continuity governance**: formalising the spatial attribution and interrupt recovery of the cognitive individual's state.
 
-### 10.3 结语
+### 10.3 Closing remarks
 
-问题是人类认知与世界交互的基本单元。MPM 是对"问题本质"的一次元层次反思——v2 的特别之处在于，这次反思不再是纯粹的纸面推演：框架在自己的实现中生活了三十个问题的时光，被发现于缺陷、修补于证据、并反过来修订了自己的公式。正如 Weierstrass 逼近定理所揭示的：任何主体都无法完美把握"真实"，但可以通过迭代不断逼近它。每一次收敛都不是终点，而是下一轮认知跃迁的起点——本稿亦然。
+Problems are the basic unit of human cognition and of interaction with the world. MPM is a meta-level reflection on "the nature of problems" — and what is special about v2 is that the reflection is no longer purely paper reasoning: the framework lived through thirty problems inside its own implementation, was found in defects, repaired on evidence, and revised its own formula in return. As the Weierstrass approximation theorem shows: no subject can grasp "the real" perfectly, but any subject can approach it by iteration. Every convergence is not an endpoint but the starting point of the next cognitive leap — and so is this draft.
 
 ---
 
-## 参考文献
+## References
 
 [1] Newell A, Simon H A. Human Problem Solving[M]. Englewood Cliffs: Prentice-Hall, 1972.
 
@@ -406,8 +408,8 @@ v2 将此检验从断言升级为**带账本的闭环**：v1 → 运行时实现
 
 [16] DeepSeek-AI. DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning[EB/OL]. arXiv preprint, 2025.
 
-[17] OpenRSI: Recursive Self-Improvement in LLM Agents[EB/OL]. Technical report, 2026.（框架实现与实验前沿，正文 §1.1、§8.1 所引）
+[17] OpenRSI: Recursive Self-Improvement in LLM Agents[EB/OL]. Technical report, 2026. (Implementation and experimental frontier, cited in §1.1 and §8.1)
 
 ---
 
-**附注（v2 修订溯源）**：本稿全部运行时证据来自作者部署的 DSH 代理运行时中的 MPM 常驻引擎（2026-08 实测：30 题/19 沉积/32 轮巡检），逐条修订对照表与证据链见配套文件 `paper-v2-roadmap.md`（修订路线图）与 `paper-eq4-revision.md`（式(4) 修订专项）。案例四的完整账本可由运行时的飞轮状态工具逐条复核。
+**Note (v2 revision provenance)**: all runtime evidence in this draft comes from the MPM resident engine in the author's deployed DSH agent runtime (measured 2026-08: 30 problems, 19 deposits, 32 patrol rounds). The item-by-item revision table and evidence chain are in the companion files `paper-v2-roadmap.md` (revision roadmap) and `paper-eq4-revision.md` (the equation (4) revision). Every entry of case four's ledger can be re-checked one by one through the runtime's flywheel-state tool.

@@ -25,6 +25,7 @@ const REGIME = {
   'docs/install.zh-CN.md': 'impersonal',
   'docs/architecture.zh-CN.md': 'impersonal',
   'docs/DEVELOPMENT.zh-CN.md': 'impersonal',
+  'docs/theory.zh-CN.md': 'impersonal',
   'docs/architecture.zh-CN.md': 'impersonal',
   'docs/DEVELOPMENT.zh-CN.md': 'impersonal',
   'docs/architecture.md': 'impersonal',
@@ -104,6 +105,7 @@ const GROUPS = [
   ['docs/install.md', 'docs/install.zh-CN.md'],
   ['docs/architecture.md', 'docs/architecture.zh-CN.md'],
   ['docs/DEVELOPMENT.md', 'docs/DEVELOPMENT.zh-CN.md'],
+  ['docs/theory.md', 'docs/theory.zh-CN.md'],
   ['docs/architecture.md', 'docs/architecture.zh-CN.md'],
   ['docs/DEVELOPMENT.md', 'docs/DEVELOPMENT.zh-CN.md']
 ];
