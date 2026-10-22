@@ -1,14 +1,12 @@
-// P608 判据（元判据）：**英文那半必须独立地守住同一批结构要求**
+// P608 判据（元判据）：**英文那一份必须独立地守住同一批结构要求**
 //
-// 为什么需要它：README 现在是双语的（英文在前、中文主稿在后）。而 readme-judges
-// 里的 6 条断言原先只认中文关键词 —— 于是英文那半**从来没有被判据碰过**：
-// 把英文段整段删掉，判据照样全绿。
+// 为什么需要它：README 曾经是"一个文件里塞两种语言"。而 readme-judges 里那 6 条
+// 断言只认中文关键词 —— 于是英文那半**从来没有被判据碰过**：把英文段整段删掉，
+// 判据照样全绿。
 //
-// ⇒ 这条判据只看【中文段之前的英文部分】，用英文的判词重跑同一批结构要求：
-//   第一屏有定义 / 承认未定稿 / 承认由 AI 写 / 愿景 + 位置性边界 / 试图的姿态 /
-//   编号不是必读 / 路线图 + 贡献指南 + 可跑的命令。
-//
-// 它不替代 readme-judges（那些守中文主稿），它补的是"另一半没人看"这个洞。
+// ★P612：现在改成标准做法 —— 一个语言一个文件（README.md / README.zh-CN.md）。
+//   于是"英文那半"不再是一段切片，就是 README.md 整个文件；下面这些英文判词
+//   直接守它，中文那份由 readme-judges 守。**每份文档只由它自己那门语言的判词检查。**
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -17,13 +15,7 @@ import path from 'node:path';
 const ROOT = path.resolve(import.meta.dirname, '..');
 const RAW = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
 
-/** 英文部分 = 第一条中文主稿标题之前的全部内容 */
-function englishPart() {
-  const i = RAW.search(/^##\s*简体中文/m);
-  return i < 0 ? RAW : RAW.slice(0, i);
-}
-
-const EN = englishPart();
+const EN = RAW;
 
 test('① 英文部分必须存在，而且不是一小段（否则"英文在前"是假的）', () => {
   assert.ok(EN.length > 3000, '英文部分只有 ' + EN.length + ' 字节 —— 双语要么写全，要么别声称双语');

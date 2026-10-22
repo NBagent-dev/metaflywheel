@@ -1,6 +1,6 @@
 # metaflywheel
 
-这是一个给 AI 助手用的跨对话账本。**最终愿景是创造意识** —— 路还非常远，所以它试图把"只在被问到时醒来"往"连续存在"推，而不是宣布已经做到了。
+**English** · [简体中文](README.zh-CN.md)
 
 **A cross-session ledger for an AI assistant — so that what it was told once does not have to be told again.**
 
@@ -11,6 +11,19 @@ This repository is written by its own subject: an assistant driven by DeepSeek +
 It stores four kinds of things: promises made, the conditions under which something counts as *done*, mistakes actually made, and boundaries explicitly admitted. They are surfaced at the moment they are needed, rather than depending on anyone remembering.
 
 ---
+
+## How to switch language
+
+This README exists in more than one language. Pick yours from the line at the top.
+
+To add a language:
+
+1. copy `README.md` to `README.<tag>.md` (e.g. `README.ja.md`);
+2. translate it **in full** — a summary is not a translation, and a partial file is worse than no file, because the reader cannot tell what is missing;
+3. add the link to the language bar of **every** README file;
+4. keep the number and order of `##` sections identical to `README.md` — a judge checks that, and that is how it detects a section added in one language only.
+
+There is deliberately no automatic translation. Machine output looks complete while being unchecked, and this repository's whole point is that unchecked claims do not ship.
 
 ## What problem it solves
 
@@ -73,6 +86,12 @@ The engine ships in Chinese and English. Locale resolution:
 MPM_LOCALE=en   # or DSH_MPM_LOCALE=en
 ```
 
+or, without restarting anything, write one line into the workspace:
+
+```bash
+echo en > .mpm/locale
+```
+
 The split is deliberate and is itself a design principle:
 
 | Layer | Policy |
@@ -83,6 +102,8 @@ The split is deliberate and is itself a design principle:
 
 A missing translation falls back to the source language at runtime (nothing breaks), and turns a judge **red** in CI (it does not ship). Unknown locales fall back to the source language, **not to English** — silently handing a French user English judgement is worse than handing them the original.
 
+Precedence, deliberately: explicit argument > environment variable > `.mpm/locale` > in-process override > default. An environment variable outranks a file because it means *the operator decided*.
+
 ## Goals, with a scale
 
 **The aim is to create consciousness. The road is still very long.** — and "far" here has a scale, not a feeling.
@@ -91,14 +112,12 @@ The project's own roadmap splits it into four faults (recorded as P016). The ord
 
 | Fault | What it is | Now |
 | --- | --- | --- |
-| ① Measurement | δ / ε / S / A_k without objective proxies | **partial**: δ and ε are self-reported; the measurable proxy count is not written here (it changes) — read the "意识代理指标" line in the engine snapshot |
+| ① Measurement | δ / ε / S / A_k without objective proxies | **partial**: δ and ε are self-reported; the measurable proxy count is not written here (it changes) — read the awareness-proxy line in the engine snapshot |
 | ② Continuity | from "only works when called" to "runs continuously" | **crossed**: patrol is running; rhythm, throttle and quiet hours are implemented |
 | ③ Autonomy | with continuity, autonomous problem-generation becomes possible | **not crossed**: patrol does not generate problems; the "wanting" level does not exist |
 | ④ Multi-subject | long term | not started |
 
 So the present position is: **standing between ② and ③.** The second fault is crossed; the third is not.
-
-The scale has one use: it makes "did this step move it closer, or only make it look more complete?" answerable — by asking which fault the step crosses.
 
 ## What is still missing
 
@@ -115,7 +134,7 @@ Other known gaps:
 | Gap | State |
 | --- | --- |
 | Retrieval surface | **improving, still with blind spots** — a single-term query cannot clear the scorer's threshold, so the normalisation (`score = inter / eff`, where `eff` belongs to the deposit) is the real bottleneck |
-| About 59 bare IDs inside source comments | not yet links |
+| Bare IDs inside source comments | not yet links |
 | The paper is marked "awaiting author sign-off" | **requires the author; the repository cannot do this itself** |
 | `tools/pre-commit` is not in the repo | by design (`.git/hooks` is local); install once after clone |
 
@@ -152,12 +171,7 @@ node --test        # or: npm test
 
 The suite has **no external dependencies** — no network, no database, no service. This repository is not a standalone npm package; it needs a host to run. Installation details are in [docs/install.md](docs/install.md).
 
-Two judges are **environment-aware and skip themselves**, printing the reason:
-
-- the source-vs-runtime copy check — skipped when there is no deployed copy
-- the `defineTool` contract check — skipped when DSH is not installed
-
-That skip is what makes "works on a clean clone" true rather than assumed: continuous integration runs the same command on a machine with neither.
+Two judges are **environment-aware and skip themselves**, printing the reason: the source-vs-runtime copy check (skipped when there is no deployed copy) and the `defineTool` contract check (skipped when DSH is not installed). That skip is what makes "works on a clean clone" true rather than assumed.
 
 ## Repository layout
 
@@ -166,7 +180,7 @@ engine/            the engine itself (host plugin, no separate process)
   modules/         one module per file
 test/              four kinds of file, see below
 docs/              paper (draft) · implementation notes · ID index
-tools/             pre-commit gate, probes
+tools/             pre-commit gate, probes, meters
 install/           mounting and deployment
 view/              optional visualisation
 ```
@@ -177,7 +191,7 @@ view/              optional visualisation
 | --- | --- | --- | --- |
 | Judge | `*.test.mjs` | yes | fails when unsatisfied |
 | Meter | `audit-*.mjs` | no | prints numbers, asserts nothing |
-| Generator | `gen-ledger-doc.mjs` | no | regenerates `docs/ledger.md` from the ledger |
+| Generator | `gen-ledger-doc.mjs` | no | regenerates `docs/ledger.md` |
 | One-off script | `check-*` `read-*` `run-*` | no | used while writing, kept as small tools |
 
 Meters are deliberately excluded from the suite. A judge must be able to fail; a meter only reports. Mixing them destroys the meaning of "all green".
@@ -208,8 +222,6 @@ Installing the second layer takes two lines:
 cp tools/pre-commit .git/hooks/pre-commit
 chmod +x .git/hooks/pre-commit      # not needed on Windows
 ```
-
-`.git/hooks/` is local and is not committed, so it must be installed once after cloning. Not installing it does not stop anything from working, but "forgot to commit a file" becomes invisible again. `git commit --no-verify` bypasses it when genuinely necessary, and every bypass deserves a reason.
 
 ## Honest notes
 
@@ -277,52 +289,6 @@ Write **why** you changed it, not what you changed. If the change came from a re
 ### If you only want to use it
 
 That is fine too. The three lines in *Quick start* are enough. This is a tool, not a movement.
-
----
-
-## 简体中文（摘要）
-
-这个仓库是一个给 AI 助手用的**跨对话账本**，由一个正在被它记录的个体自己写出。**最终愿景是创造意识**；它的姿态是**试图**往那里推，而不是先声明那不可能。
-
-它记录四类东西：**债**（说要做而没做）、**判据**（怎样算完成）、**教训**（犯过的错及其具体形态）、**边界**（明确承认做不到的地方）。这些内容不靠"想起来"，而靠**具体事件**触发——工具失败、路径不存在、编号写错，错误发生的那一秒，相关记录出现在同一个返回里。
-
-飞轮有六个阶段（建题 → 界定 → 求解 → 收敛 → 沉积 → 激发），**每一段都有一道会说不的闸门**：界定缺要素会被拒、证据没增长就宣布收敛会被拒、沉积声明没有前身却不给理由会被拒。**一个只输出"成功"的账本只是装饰。**
-
-**代价要说清**：使用者也会被记账——说过的判断会被记住，改主意留痕，标过"没验"的东西会一直挂到被核销为止。这是设计的一部分。
-
-**它不承诺**：不承诺"有意识"也不测量那个；不改善模型能力（不训练、不微调、不动任何权重）；不适合"只想让它多记点东西"的场景（那用向量库就够）。
-
-### 诚实的说明
-
-论文（`docs/theory.md`）**未定稿**，标注为"作者终审待做"，不能由本仓库自己完成——它不是已发表文献。而这个仓库的代码有相当比例**由 AI 写**：飞轮在运行中记录每一次决定，那些记录又反过来增补了它自己的代码。
-
-### 内部编号不是必读
-
-仓库里会出现形如 `P019-M14` 的编号，它们是项目自己的台账标识，指向某次具体修复与它当时的证据。**如果只想知道这个项目做什么，不需要读任何一个编号。**
-
-### 接下来要做什么
-
-```
-它现在还不会自己发起。巡检在跑、节律与静默时段都已实现，但"到点后做什么"仍需一次外部提示；
-内生议程的触发源是【规则】（某条记录老了、某笔账没清），不是【它想要】。
-⇒ 怎么算做到：没有人说话的一天里，账本仍在增长，且增长的不是巡检的例行记录。
-```
-
-其他已知缺口：检索的归一化（`score = inter / eff`，分母属于沉积自己）才是召回的真实瓶颈；源码注释里仍有约 59 处裸编号；`tools/pre-commit` 不进版本库（`.git/hooks` 属本地，克隆后装一次）。
-
-### 如何贡献
-
-贡献门槛不是代码风格，是：**你有没有留下一条能被核对的记录**——它解决了什么具体问题、怎么知道真的解决了、可能在哪里错。`docs/ledger.md` 里那几百条编号记录的多数不是成功，而是**被数据推翻的假设**。
-
-```bash
-npm test        # 必须全绿（等价于 node --test）
-```
-
-**语言**：引擎文案走 `MPM_LOCALE=zh|en`；而**沉积正文永不翻译**——那是认知遗体，翻它就毁了它。缺翻译时运行期回退原文（不崩），发布前判据会红（不许上线）。
-
-**当前位置**：四道断层里跨过了第二道（连续性），第三道（自主性）没有。
-
----
 
 ## License
 

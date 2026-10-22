@@ -10,7 +10,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const README = 'C:/Users/Administrator/Desktop/daima/XIN/metaflywheel/README.md';
+// ★P612：README 拆成多文件 + 语言栏之后，这一批中文判据改为守 **中文那一份**。
+//   守的不是"README.md 这个文件名"，是"给中文读者看的那份文档"。
+const README = 'C:/Users/Administrator/Desktop/daima/XIN/metaflywheel/README.zh-CN.md';
 const read = () => fs.readFileSync(README, 'utf8');
 const firstScreen = (n = 20) => read().split('\n').slice(0, n).join('\n');
 
@@ -56,9 +58,9 @@ test('③ 第一屏必须能回答"这是什么"（有一句话，而不是一�
 
 test('④ 必须有【诚实说明】段：承认理论未定稿 + 代码由 AI 写', () => {
   const t = read();
-  assert.ok(/未定稿|终审待做|draft|awaiting author|not published/i.test(t),
+  assert.ok(/未定稿|终审待做|待作者|草稿|draft|awaiting author|not published/i.test(t),
     '★ 必须承认理论部分未定稿 —— 否则是在把自产的东西写成外部权威');
-  assert.ok(/AI[^。]{0,20}写|由 ?AI|written by an? AI|by its own subject/i.test(t),
+  assert.ok(/AI[^。]{0,20}写|由 ?AI|由它自己的主体|主体写成|written by an? AI|by its own subject/i.test(t),
     '★ 必须承认代码有相当比例由 AI 写');
 });
 
