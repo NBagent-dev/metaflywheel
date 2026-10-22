@@ -10,6 +10,7 @@ import { phiOf, revisionOf } from "./util.mjs";
 import { SEDIMENT_STATUS, applySupersedes, statusSummary } from "./sediment-status.mjs";
 import { normalizeAgendaWeights, breakdownLine } from "./agenda-weights.mjs";   // ★P593：议程权重外置 + 贡献占比诊断
 import { buildIndex, indexJson, sameIndex, indexLine } from "./sediment-index.mjs";   // ★P594⑥：离线索引（可重建的词面）
+import { enrichSediment, enrichLine } from "./sediment-enrich.mjs";   // ★P602：富化侧车（检索读它，需一个入口来写）
 import { evaluateRetrieval, evalLine } from "./rank-eval.mjs";   // ★P596⑤：检索排序的度量（用 adopt 当真值）
 import { normalizeRetrievalWeights } from "./retrieval-weights.mjs";   // ★P594⑤：三项权重
 import { innerAgenda } from "./agenda.mjs";   // ★P593：mpm_weights show 要打印真实议程的占比  // ★P591：沉积的「被取代」（ADR 式）
@@ -966,6 +967,58 @@ export function makeTools(deps) {
         } },
       ['problemId', 'delta', 'epsilon', 'robustness'],
       (args, exec) => toolConverge(d, args, exec)
+    ),
+    mkTool(
+      'mpm_enrich',
+      'P594④ 富化侧车：给一条沉积**追加**关键词/别名（**原文一个字节都不改**——原文是判据的基准）。action=add（默认）/ show。★为什么需要它：沉积是不可变 markdown ⇒ 写入那一刻没出现的词**永远不会**出现在它身上；而检索只读标题+标签+富化词 ⇒ 富化让"后来才想到的说法"能被查到。★只追加不覆盖；重复词返回 nothing-new；★它只改检索面，不改结论。',
+      {
+        properties: {
+          action: { type: 'string', description: 'add（默认）| show' },
+          id: { type: 'string', description: 'add：沉积 id，如 P028-M18' },
+          keywords: { type: 'string', description: 'add 可选：关键词，逗号或空格分隔' },
+          aliases: { type: 'string', description: 'add 可选：别名 / 同义说法，逗号或空格分隔' },
+          reason: { type: 'string', description: 'add 可选：为什么补这些词（留痕）' }
+        }
+      },
+      [],
+      async function (args) {
+        args = args || {};
+        const d = CURRENT_DEPS;
+        const act = String(args.action || 'add').toLowerCase();
+        const seds = (d && d.state && Array.isArray(d.state.sediments)) ? d.state.sediments : [];
+        const canPersist = !!(d && typeof d.persist === 'function');
+        const split = function (x) {
+          return String(x || '').split(/[,，、\s]+/).map(function (t) { return t.trim(); }).filter(Boolean);
+        };
+        if (act === 'show') {
+          const have = seds.filter(function (s) { return s && s.enriched; });
+          return {
+            ok: true,
+            report: '富化侧车：' + have.length + '/' + seds.length + ' 条有侧车'
+              + (have.length ? '\n' + have.slice(-8).map(enrichLine).join('\n') : '')
+          };
+        }
+        const id = String(args.id || '').trim();
+        if (!id) return { ok: false, report: 'add 需要 id（沉积编号，如 P028-M18）' };
+        const kw = split(args.keywords), al = split(args.aliases);
+        if (!kw.length && !al.length) return { ok: false, report: 'add 需要 keywords 或 aliases（否则无事可做）' };
+        let target = null;
+        for (let i = 0; i < seds.length; i++) {
+          if (seds[i] && String(seds[i].id) === id) { target = seds[i]; break; }
+        }
+        if (!target) return { ok: false, report: '找不到沉积 ' + id };
+        const r = enrichSediment(target, { keywords: kw, aliases: al, reason: args.reason }, Date.now());
+        if (!r || r.ok === false) return { ok: false, report: '未富化：' + ((r && r.reason) || 'nothing-new') };
+        let persisted = { ok: false, reason: 'persist 不可用' };
+        if (canPersist) {
+          try { persisted = await d.persist(); }
+          catch (e) { persisted = { ok: false, reason: (e && e.message) ? e.message : String(e) }; }
+        }
+        return {
+          ok: true,
+          report: enrichLine(target) + '\n（' + ((persisted && persisted.ok) ? '已落盘' : '⚠ 未落盘：' + ((persisted && persisted.reason) || '未知')) + '）'
+        };
+      }
     ),
     mkTool(
       'mpm_supersede',
