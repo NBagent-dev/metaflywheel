@@ -8,7 +8,7 @@
 // 铁律：只做「闭包→参数化」机械变换——函数体一字未动（自由变量改由 e 绑定），阈值/文案/流程不变。
 
 // ★P604：运行时语言覆盖（读 <root>/.mpm/locale 后写入它，见 restore 内）
-import { setLocaleOverride } from './i18n.mjs';
+import { setLocaleFile } from './i18n.mjs';
 
 // ── 纯函数（无自由变量，保持无 e 签名）─────────────────
 function norm(p) { return String(p).replace(/\\/g, '/').replace(/\/+$/, ''); }
@@ -142,17 +142,11 @@ async function restoreImpl(e) {
   }
   if (best) {
     e.root.current = best.root;
-    // ★P604：运行时语言开关 —— 读 `<root>/.mpm/locale`（一行）。写这个文件即切换，**不需重启**。
-    //   · 为什么挂在这里：这是"沉积根刚确定"的唯一位置；语言属于渲染层，但它需要一个家。
-    //   · 为什么读不到也不报错：语言文件是可选的，缺它就用默认；**一个可选配置不许拦住加载**。
-    //   · 为什么不在这里也读环境变量：那由 resolveLocale 自己负责（优先级只该有一处）。
-    try {
-      if (e.fsSvc && typeof e.fsSvc.readText === 'function') {
-        const lf = await e.fsSvc.resolve(norm(e.root.current) + '/.mpm/locale');
-        const txt = await e.fsSvc.readText(lf);
-        if (txt && String(txt).trim()) setLocaleOverride(String(txt).trim().split(/\r?\n/)[0]);
-      }
-    } catch (err) { /* 没有 locale 文件 ⇒ 保持默认语言 */ }
+    // ★P606（更正 P604）：这里只交**路径**给 i18n，不读内容。
+    //   上一轮我在这里读了一次、写进模块级覆盖 —— 于是"写文件即生效"是假的：
+    //   restore 只在加载/换根时跑，写完还是要重启。那正是我批评环境变量的同一个毛病。
+    //   ⇒ 现在每次 resolveLocale 现读；本行只负责告诉 i18n 文件在哪。
+    setLocaleFile(norm(e.root.current) + '/.mpm/locale');
     e.state.seq = best.data.seq || 0;
     e.state.problems = best.data.problems || {};
     e.state.sediments = Array.isArray(best.data.sediments) ? best.data.sediments : [];

@@ -12,7 +12,7 @@
 //   ⑤ 显式参数 > 一切（"这一次调用要什么"）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveLocale, setLocaleOverride, getLocaleOverride } from '../engine/modules/i18n.mjs';
+import { resolveLocale, setLocaleOverride, getLocaleOverride, setLocaleFile } from '../engine/modules/i18n.mjs';
 import { hitsLine } from '../engine/modules/hits.mjs';
 
 const NOW = 1792500000000;
@@ -82,34 +82,46 @@ test('⑤ 显式参数 > 环境变量 > 覆盖：这一次调用说了算', () =
   clean();
 });
 
-// ── 接线判据（static）────────────────────────────────────────────
-// ★为什么是静态检查而不是运行它：`<root>/.mpm/locale` 的读取发生在引擎 restore 内部，
-//   需要宿主注入 fsSvc 才能执行 —— 在测试里重建那套注入比被测代码还长。
-//   而"能算出 ≠ 会被调用"是这个仓库反复踩的坑（P514/P517/P519 同族），
-//   所以至少把"调用点存在 + 读失败不会拦住加载"钉住；真实生效由下一次重启人工验一次。
+// ── 接线判据（static + 一处真跑）────────────────────────────────
+// ★P606 更正：上一版这里写着"读取发生在 restore 内部，需要宿主注入 fsSvc 才能执行"——
+//   而那正是**错的设计**：读在启动时 ⇒ 写文件仍要重启。现在 i18n 每次现读，
+//   于是"不重启就生效"可以直接**真跑**，不必再靠静态检查替它作证。
 const fs = await import('node:fs');
 const path = await import('node:path');
+const os = await import('node:os');
 const STATE_SRC = fs.readFileSync(
   path.join(import.meta.dirname, '..', 'engine', 'modules', 'state.mjs'), 'utf8');
 
-test('⑥ ★接线：state.mjs 必须在确定沉积根之后读取 .mpm/locale 并调用 setLocaleOverride', () => {
-  assert.ok(STATE_SRC.includes("from './i18n.mjs'"), 'state.mjs 必须 import i18n（否则覆盖永远设不上）');
-  assert.ok(STATE_SRC.includes('setLocaleOverride('), 'state.mjs 必须真的调用 setLocaleOverride');
-  assert.ok(STATE_SRC.includes('/.mpm/locale'), '必须读的是 .mpm/locale 这个路径');
+test('⑥ ★接线：state.mjs 必须把语言文件路径交给 i18n（不是自己读一次）', () => {
+  assert.ok(STATE_SRC.includes("from './i18n.mjs'"), 'state.mjs 必须 import i18n');
+  assert.ok(STATE_SRC.includes('setLocaleFile('), 'state.mjs 必须调用 setLocaleFile 交出路径');
+  assert.ok(STATE_SRC.includes('/.mpm/locale'), '交出去的必须是 .mpm/locale 这个路径');
+  // ★负控：不许再在 restore 里"读一次内容然后覆盖"——那会让文件变成启动期设置
+  assert.equal(STATE_SRC.includes('setLocaleOverride('), false,
+    'restore 里不许再有 setLocaleOverride（那是 P604 的错误设计：文件变启动期设置）');
 });
 
-test('⑦ ★负控：读 locale 文件必须在 try/catch 里（缺文件不许拦住加载）', () => {
-  // ★第一版这条判据红在自己身上：它用 indexOf('/.mpm/locale') 定位，
-  //   而第一处出现在**文件顶部的注释**里（"读 <root>/.mpm/locale"），
-  //   于是它检查了注释周围有没有 try/catch —— 锚点选错，判据就测了一段注释。
-  //   ⇒ 改成锚在**真正的调用点** `setLocaleOverride(String(txt)` 上。
-  const i = STATE_SRC.indexOf('setLocaleOverride(String(txt)');
-  assert.ok(i > 0, '找不到调用点 ⇒ ⑥ 应该已经红了（或调用被改写，本判据需同步）');
-  const around = STATE_SRC.slice(Math.max(0, i - 700), i + 400);
-  assert.ok(/try\s*\{/.test(around), '读取必须包在 try 里：没有 locale 文件是正常情形，不许抛');
-  assert.ok(/catch\s*\(/.test(around), '必须有 catch：否则缺文件会让整个 restore 失败');
-  // 而且 catch 里不许把错误升级成失败返回（保持"可选配置"的语义）
-  assert.ok(!/catch[^}]{0,200}return\s*\{[^}]*ok:\s*false/.test(around),
-    '缺 locale 文件不是失败，catch 里不许返回 ok:false');
+test('⑦ ★★不重启就生效：改文件后下一次调用必须立刻换语言（无需任何重载）', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mpm-loc-'));
+  const f = path.join(tmp, 'locale');
+  const savedEnv = process.env.MPM_LOCALE;
+  delete process.env.MPM_LOCALE;
+  try {
+    setLocaleOverride('');
+    fs.writeFileSync(f, 'en');
+    setLocaleFile(f);
+    assert.equal(resolveLocale(), 'en', '写 en 后必须立刻是 en');
+    assert.ok(hitsLine({ hits: LIST }, 3).includes('Hit feedback loop'), '渲染必须立刻变英文');
+    fs.writeFileSync(f, 'zh');
+    assert.equal(resolveLocale(), 'zh', '★同一进程内改成 zh 必须立刻回落 —— 这就是"不重启"');
+    // 文件被删掉 ⇒ 回默认，不抛
+    fs.unlinkSync(f);
+    assert.equal(resolveLocale(), 'zh', '文件消失必须落回默认，不许抛');
+  } finally {
+    setLocaleFile('');
+    setLocaleOverride('');
+    if (savedEnv != null) process.env.MPM_LOCALE = savedEnv;
+    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { /* 清理失败不影响结论 */ }
+  }
 });
 

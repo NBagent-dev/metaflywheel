@@ -60,16 +60,33 @@ const TABLES = {
   }
 };
 
-/**
- * ★P604 运行时语言切换：模块级覆盖值。
- *
- * 为什么需要它：`MPM_LOCALE` 只有进程启动时设一次 —— 而"发布给全球用户"的产品里，
- * 切语言不该需要重启整个宿主。所以多一层：引擎在读沉积根时顺带读 `<root>/.mpm/locale`
- * （一行字），写文件 ⇒ **下一次调用生效，不重启**。
- *
- * ★优先级刻意是 **显式参数 > 环境变量 > 本覆盖 > 默认 zh**：
- *   环境变量代表"运维已经决定了"，不该被一个文件悄悄盖掉；显式参数代表"这一次调用要什么"。
- */
+// ★★P606 更正 P604 的一个设计错误：语言文件必须**在用到时读**，不是启动时读一次。
+//
+//   上一轮我把读取放在 state 的 restore 里（启动时）——于是"写 .mpm/locale 即生效"
+//   这句话是**假的**：restore 只在加载/换根时跑，写完文件仍要重启。
+//   那正是我上一轮批评环境变量时的同一个毛病，我只是把它换成了文件形式。
+//   ⇒ 现在：把**路径**交给 i18n，每次 resolveLocale 现读（一个小文件，代价可忽略）。
+import fs from 'node:fs';
+
+let localeFilePath = '';
+
+/** 记录语言文件路径（引擎在确定沉积根后调用；空串表示没有这个文件）。 */
+export function setLocaleFile(p) {
+  localeFilePath = (typeof p === 'string' && p.trim()) ? p.trim() : '';
+  return localeFilePath;
+}
+
+/** 现读语言文件第一行；读不到 ⇒ 空串（**缺文件是正常情形，不许抛**）。 */
+function readLocaleFile() {
+  if (!localeFilePath) return '';
+  try {
+    const txt = fs.readFileSync(localeFilePath, 'utf8');
+    return String(txt || '').trim().split(/\r?\n/)[0] || '';
+  } catch (err) {
+    return '';   // 文件不存在/不可读 ⇒ 当作没设置
+  }
+}
+
 let overrideLocale = '';
 
 /** 设置/清空运行时覆盖（非字符串或空串 ⇒ 清空）。返回落地值（未归一化）。 */
@@ -82,13 +99,13 @@ export function setLocaleOverride(v) {
 export function getLocaleOverride() { return overrideLocale; }
 
 /**
- * 解析 locale：显式参数 > 环境变量 > 运行时覆盖 > 默认 zh。
+ * 解析 locale：**显式参数 > 环境变量 > 语言文件 > 进程内覆盖 > 默认 zh**。
  * 归一化：zh-CN / zh_CN / ZH → zh；不认识的 → 默认（★不静默崩，也不静默变英文）。
  */
 export function resolveLocale(explicit) {
   const raw = (typeof explicit === 'string' && explicit.trim())
     ? explicit
-    : (process.env.DSH_MPM_LOCALE || process.env.MPM_LOCALE || overrideLocale || '');
+    : (process.env.DSH_MPM_LOCALE || process.env.MPM_LOCALE || readLocaleFile() || overrideLocale || '');
   const norm = String(raw || '').trim().toLowerCase().split(/[-_]/)[0];
   return (norm && TABLES[norm]) ? norm : DEFAULT_LOCALE;
 }
