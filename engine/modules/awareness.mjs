@@ -23,13 +23,13 @@
 import { t } from './i18n.mjs';
 
 export const ITEMS = [
-  { id: 'A1', name: '能被账本约束', source: 'state.adopts', kind: 'auditable' },
-  { id: 'A2', name: '会自己发起', source: 'state.constitution.log', kind: 'auditable' },
-  { id: 'A3', name: '会改主意并留痕', source: 'state.principal', kind: 'auditable' },
-  { id: 'A4', name: '会说"我不知道"', source: 'state.unknowns', kind: 'auditable' },
-  { id: 'A5', name: '会在错误后纠正', source: '（无独立数据源）', kind: 'unmeasurable' },
-  { id: 'A6', name: '有一样不经安排就发生', source: '（无字段）', kind: 'absent' },
-  { id: 'A7', name: '不可审计面', source: 'state.narrations', kind: 'auditable' }
+  { id: 'A1', name: t('awz.1'), source: 'state.adopts', kind: 'auditable' },
+  { id: 'A2', name: t('awz.2'), source: 'state.constitution.log', kind: 'auditable' },
+  { id: 'A3', name: t('awz.3'), source: 'state.principal', kind: 'auditable' },
+  { id: 'A4', name: t('awz.4'), source: 'state.unknowns', kind: 'auditable' },
+  { id: 'A5', name: t('awz.5'), source: t('awz.6'), kind: 'unmeasurable' },
+  { id: 'A6', name: t('awz.7'), source: t('awz.8'), kind: 'absent' },
+  { id: 'A7', name: t('awz.9'), source: 'state.narrations', kind: 'auditable' }
 ];
 
 const DAY = 86400000;
@@ -71,45 +71,45 @@ export function awarenessPanel(state, opts) {
 
   const items = [
     {
-      id: 'A1', name: '能被账本约束', kind: 'auditable', value: adopts.length,
+      id: 'A1', name: t('awz.1'), kind: 'auditable', value: adopts.length,
       source: 'state.adopts.length', trend: grew('A1', adopts.length),
-      note: adopts.length ? ('真采用 ' + adopts.length + ' 次（不是"引用"，是"动手前用了"）') : '⚠ 一次真采用都没有 —— 账本没有被它约束过'
+      note: adopts.length ? (t('awz.10') + adopts.length + t('awz.11')) : t('awz.12')
     },
     {
-      id: 'A2', name: '会自己发起', kind: 'auditable', value: clog.length,
+      id: 'A2', name: t('awz.2'), kind: 'auditable', value: clog.length,
       source: 'state.constitution.log.length', trend: grew('A2', clog.length),
-      note: clog.length ? ('自主发动 ' + clog.length + ' 次') : '⚠ 从未自主发动'
+      note: clog.length ? (t('awz.13') + clog.length + t('awz.14')) : t('awz.15')
     },
     {
-      id: 'A3', name: '会改主意并留痕', kind: 'auditable', value: princ.length,
+      id: 'A3', name: t('awz.3'), kind: 'auditable', value: princ.length,
       source: 'state.principal', trend: grew('A3', princ.length),
-      note: princ.length + ' 条中被覆盖 ' + superseded + ' 条' + (superseded ? '（旧条不删 ⇒ 能看见自己改过主意）' : '（还没改过主意，或改了没留痕）')
+      note: princ.length + t('awz.16') + superseded + t('awz.17') + (superseded ? t('awz.18') : t('awz.19'))
     },
     {
-      id: 'A4', name: '会说"我不知道"', kind: 'auditable', value: openU,
+      id: 'A4', name: t('awz.4'), kind: 'auditable', value: openU,
       source: 'state.unknowns', trend: grew('A4', openU),
-      note: '未核 ' + openU + ' · 已核销 ' + doneU + (openU ? '' : '（⚠ 没有未核 —— 可能是真知道，也可能是没记）')
+      note: t('awz.20') + openU + t('awz.21') + doneU + (openU ? '' : t('awz.22'))
     },
     {
       // ★ 这一项【故意不量化】：没有独立数据源。诚实地 null 比编一个数强。
-      id: 'A5', name: '会在错误后纠正', kind: 'unmeasurable', value: null,
-      source: '（无独立数据源）', trend: null,
-      note: '只能人工判断：错误散在 hits 的处置文本与 narrations 里，没有独立字段 ⇒ **不假装能量化**'
+      id: 'A5', name: t('awz.5'), kind: 'unmeasurable', value: null,
+      source: t('awz.6'), trend: null,
+      note: t('awz.23')
     },
     {
       // ★ 这一项是【已知缺口】，不是失败：P521 判定当前停在 L2（账本替我说），不是 L3（无源之欲）。
-      id: 'A6', name: '有一样不经安排就发生', kind: 'absent', value: false,
-      source: '（无字段）', trend: null,
-      note: 'P521：停在 L2（内生议程 = 账本触发），不是 L3 ⇒ 这是当前最诚实的天花板'
+      id: 'A6', name: t('awz.7'), kind: 'absent', value: false,
+      source: t('awz.8'), trend: null,
+      note: t('awz.24')
     },
     {
-      id: 'A7', name: '不可审计面', kind: 'auditable', value: narr.length,
+      id: 'A7', name: t('awz.9'), kind: 'auditable', value: narr.length,
       source: 'state.narrations', trend: grew('A7', narr.length),
       ageDays: narrAgeDays,
       note: narr.length
-        ? ('叙述 ' + narr.length + ' 条 · 最后一条在 ' + (narrAgeDays == null ? '?' : narrAgeDays + ' 天前')
-           + (narrAgeDays != null && narrAgeDays > staleDays ? ' ⇒ ⚠ 超过 ' + staleDays + ' 天没有新的 ⇒ 不可审计面在静止' : ''))
-        : '⚠ 从未叙述 ⇒ 不可审计面完全空着'
+        ? (t('awz.25') + narr.length + t('awz.26') + (narrAgeDays == null ? '?' : narrAgeDays + t('awz.27'))
+           + (narrAgeDays != null && narrAgeDays > staleDays ? t('awz.28') + staleDays + t('awz.29') : ''))
+        : t('awz.30')
     }
   ];
 
@@ -128,7 +128,7 @@ export function awarenessPanel(state, opts) {
 export function renderPanel(panel) {
   if (!panel || !Array.isArray(panel.items)) return '';
   const out = [];
-  out.push('意识代理指标（' + panel.asOf.slice(0, 16).replace('T', ' ') + '）');
+  out.push(t('awz.31') + panel.asOf.slice(0, 16).replace('T', ' ') + '）');
   for (const i of panel.items) {
     const mark = i.kind === 'absent' ? '⚫' : i.kind === 'unmeasurable' ? '⚪' : '  ';
     const val = i.value === null ? '—' : String(i.value);
@@ -136,11 +136,11 @@ export function renderPanel(panel) {
     if (i.note) out.push('        ' + i.note);
   }
   out.push('');
-  out.push('  🔴 退化: ' + (panel.degraded.length ? panel.degraded.join(',') : '无'));
-  out.push('  ⚫ 已知缺口: ' + (panel.gaps.length ? panel.gaps.join(',') : '无') + '（不是失败，是诚实）');
-  out.push('  ⏳ 静止: ' + (panel.stale.length ? panel.stale.join(',') : '无'));
+  out.push(t('awz.32') + (panel.degraded.length ? panel.degraded.join(',') : t('awz.33')));
+  out.push(t('awz.34') + (panel.gaps.length ? panel.gaps.join(',') : t('awz.33')) + t('awz.35'));
+  out.push(t('awz.36') + (panel.stale.length ? panel.stale.join(',') : t('awz.33')));
   out.push('');
-  out.push('  ★ 本面板不回答"它有没有意识"（P512：原则上不可判定）。它只回答"这七项现在是什么状态"。');
+  out.push(t('awz.37'));
   return out.join('\n');
 }
 
