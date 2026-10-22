@@ -39,7 +39,7 @@ node --test        # 或：npm test
 
 测试不依赖网络、数据库或服务，在干净克隆上即可运行。
 
-这是一个插件，不是独立应用：需要一个宿主才能运行。挂载与部署见 [docs/install.md](docs/install.md)。
+这是一个插件，不是独立应用：需要一个宿主才能运行。挂载与部署见 [docs/install.zh-CN.md](docs/install.zh-CN.md)。
 
 ## 工作原理
 

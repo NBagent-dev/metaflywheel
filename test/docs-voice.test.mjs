@@ -22,6 +22,7 @@ const REGIME = {
   'README.md': 'impersonal',
   'README.zh-CN.md': 'impersonal',
   'docs/install.md': 'impersonal',
+  'docs/install.zh-CN.md': 'impersonal',
   'docs/architecture.md': 'impersonal',
   'docs/DEVELOPMENT.md': 'impersonal',
   'docs/intelligence-network.md': 'impersonal',
@@ -88,6 +89,39 @@ test('④ 每条 README/docs 都必须有标题（没有标题的文件不可能
   for (const p of Object.keys(REGIME)) {
     if (REGIME[p] === 'generated') continue;
     assert.match(body(p), /^#\s+\S/m, p + ' 没有一级标题');
+  }
+});
+
+// ⑥ 双语文档组：每种语言一份、语言栏互链、小节数相等。
+// 为什么单独一条：README 的双语由 readme-langs 守，而 docs/ 下的页面没有对应判据 ——
+// 结果 install.md 一度只有中文，而 README 声称双语。**"某个页面"最容易被漏掉。**
+const GROUPS = [
+  ['README.md', 'README.zh-CN.md'],
+  ['docs/install.md', 'docs/install.zh-CN.md']
+];
+
+test('⑥ 双语文档组：语言栏必须互链，小节数必须相等', () => {
+  for (const group of GROUPS) {
+    for (const f of group) {
+      assert.ok(fs.existsSync(path.join(ROOT, f)), '双语组里缺一份：' + f);
+    }
+    const h2 = function (f) {
+      return fs.readFileSync(path.join(ROOT, f), 'utf8').split('\n')
+        .filter(function (l) { return /^##\s+\S/.test(l); }).length;
+    };
+    const base = h2(group[0]);
+    for (const f of group) {
+      assert.equal(h2(f), base, f + ' 的小节数与 ' + group[0] + ' 不一致（' + h2(f) + ' vs ' + base + '）');
+    }
+    for (const f of group) {
+      const text = fs.readFileSync(path.join(ROOT, f), 'utf8');
+      const head = text.split('\n').slice(0, 8).join('\n');
+      for (const other of group) {
+        if (other === f) continue;
+        const leaf = path.basename(other);
+        assert.ok(head.indexOf(leaf) >= 0, f + ' 的语言栏里没有指向 ' + leaf + ' 的链接');
+      }
+    }
   }
 });
 

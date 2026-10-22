@@ -53,7 +53,7 @@ npm test                      # 221 条判据，不需要任何外部服务
 ```
 
 它需要一个宿主才能工作（**不是独立 npm 包**）——当前实现挂在 [DSH](https://github.com/deepseek-ai/dsh)
-的组合行上，通过 `file://` URL 加载。安装细节见 [docs/install.md](install.md)。
+的组合行上，通过 `file://` URL 加载。安装细节见 [docs/install.zh-CN.md](install.zh-CN.md)。
 
 ---
 

@@ -1,31 +1,33 @@
-# 安装
+# Installation
 
-MetaFlywheel 不是独立的 npm 包，而是一个宿主插件：它在 [DSH（DeepSeek Harness）](https://github.com/deepseek-ai/dsh) 的组合行上以 `file://` 方式加载。安装分三步，其中第一步不需要宿主。
+**English** · [简体中文](install.zh-CN.md)
 
-## 前置条件
+MetaFlywheel is not a standalone npm package. It is a host plugin that loads through a composition line in [DSH (DeepSeek Harness)](https://github.com/deepseek-ai/dsh) via a `file://` URL. Installation has three steps, and the first one does not need the host.
 
-| 需要 | 说明 |
+## Prerequisites
+
+| Required | Notes |
 | --- | --- |
-| DSH 宿主 | `dsh` 命令可用。本仓库在 `0.2.1-rc.2` 上验证；其他版本可能契约不同，见文末「故障排查」 |
-| Node.js 18+ | 只用于运行测试；引擎本身在宿主进程内运行 |
-| 可写的 `~/.dsh/mpm/` | 组合行补丁文件所在目录 |
+| A DSH host | the `dsh` command must be available. This repository is verified on `0.2.1-rc.2`; other versions may differ in the tool contract, see Troubleshooting |
+| Node.js 18+ | used only to run the test suite; the engine runs inside the host process |
+| A writable `~/.dsh/mpm/` | where the composition-line patch file lives |
 
-不需要网络服务、数据库或模型 API Key：模型由宿主提供，本插件不接触它。
+No network service, database or model API key is required: the model is provided by the host and this plugin never touches it.
 
-## 第 1 步：克隆并跑测试（不需要宿主）
+## Step 1: clone and run the tests (no host needed)
 
 ```bash
 git clone <this-repo> && cd metaflywheel
 node --test
 ```
 
-期望全部通过。**具体条数不写在此处** —— 手写的数字会过期，以本地输出与 CI 为准。
+Expect all tests to pass. **The number of tests is not written here** — hand-written numbers go stale; use the local output and CI.
 
-理由：先确认代码在目标机器上能跑，再挂载。若这一步失败，后续每一步都在错误前提上。
+The reason to do this first: confirm the code runs on the target machine before mounting it. If this step fails, every later step rests on a false premise.
 
-## 第 2 步：在组合行补丁里加一条
+## Step 2: add one entry to the composition-line patch
 
-编辑（或新建）`~/.dsh/mpm/cordis.patch.user.yml`，加入以下内容：
+Edit (or create) `~/.dsh/mpm/cordis.patch.user.yml` and add:
 
 ```yaml
 - insert:
@@ -33,65 +35,65 @@ node --test
     name: file:///C:/path/to/metaflywheel/engine/host.js
 ```
 
-规则：
+Rules:
 
-- `name` 必须是 `file://` 加**绝对路径**加 `engine/host.js`。Windows 写法为 `file:///C:/...`（三个斜杠），POSIX 为 `file:///home/...`
-- 路径含空格时写成 `%20`
-- 该文件里可能已有其他条目（例如 `agent-loop`）。**追加，不要覆盖**
-- `insert` 的缩进层级必须与文件内其他条目一致；缩进错了宿主会静默忽略该条目
+- `name` must be `file://` plus an **absolute path** plus `engine/host.js`. On Windows this is `file:///C:/...` (three slashes); on POSIX it is `file:///home/...`
+- spaces in the path are written as `%20`
+- the file may already contain other entries (for example `agent-loop`). **Append; do not overwrite**
+- the indentation must match the other entries in that file; if it is wrong the host silently ignores the entry
 
-## 第 3 步：重启宿主
+## Step 3: restart the host
 
-必须重启。引擎以 `file://` 静态 import 加载，改代码不会热生效。
+A restart is required. The engine is loaded as a static `file://` import, so code changes do not take effect at runtime.
 
-## 验证挂载成功
+## Verify the mount
 
-重启后，提示装配里的**运行期行**出现：
+After the restart, the **runtime line** appears in the assembled prompt:
 
 ```
-- 运行期：PID <pid> 起于 <时刻>（dsh <版本>）· 磁盘未变，跑的就是最新一份
+- Runtime: PID <pid> started at <time> (dsh <version>) · disk unchanged, running the latest copy
 ```
 
-| 看到 | 含义 | 处置 |
+| What you see | Meaning | Action |
 | --- | --- | --- |
-| 该行，且显示「磁盘未变」 | 挂载成功，运行的就是磁盘上的版本 | 无 |
-| 该行，但显示「⚠ 陈旧运行」 | 磁盘上的引擎比正在运行的更新 | 再重启一次 |
-| 没有该行 | 引擎未被加载 | 检查第 2 步的路径与缩进 |
-| 有该行，但没有自我快照段 | 引擎加载了，装配阶段失败 | 查宿主日志中 `[mpm]` 前缀的输出 |
+| The line, saying "disk unchanged" | mounted, running the on-disk version | none |
+| The line, but saying "⚠ stale runtime" | the on-disk engine is newer than the running one | restart once more |
+| No such line | the engine was not loaded | check the path and indentation from step 2 |
+| The line, but no self-snapshot block | loaded, but prompt assembly failed | check the host log for output prefixed `[mpm]` |
 
-## 更新
+## Updating
 
-`git pull` 之后必须重启宿主。例外是数据类设置：`.mpm/locale` 在每次解析时读取，改它不需要重启。
+A host restart is required after `git pull`. The exception is data-level settings: `.mpm/locale` is read on every resolution, so changing it needs no restart.
 
-## 语言
+## Language
 
-界面语言在中文与英文之间切换：
+The interface switches between Chinese and English:
 
 ```bash
-echo en > .mpm/locale          # 或：MPM_LOCALE=en
+echo en > .mpm/locale          # or: MPM_LOCALE=en
 ```
 
-分层与优先级见 README 的「语言与数据」一节。账本正文按使用者语言书写，永不翻译。
+The layering and precedence rules are in the README's "Language and data" section. Ledger content is written in the language of its user and is never translated.
 
-## 卸载与数据
+## Uninstalling, and the data
 
-从组合行补丁里删掉第 2 步加的那一块，重启宿主，引擎即不再加载。
+Delete the block added in step 2 from the composition-line patch and restart the host; the engine will no longer load.
 
-运行数据在 `<工作区>/.mpm/`：
+Runtime data lives in `<workspace>/.mpm/`:
 
-| 路径 | 内容 |
+| Path | Content |
 | --- | --- |
-| `.mpm/flywheel.json` | 账本（整份状态） |
-| `.mpm/deposits/` | 沉积（每条一个 markdown 文件） |
-| `.mpm/locale` | 语言设置，可为空 |
+| `.mpm/flywheel.json` | the ledger (whole state) |
+| `.mpm/deposits/` | deposits, one markdown file each |
+| `.mpm/locale` | language setting, may be empty |
 
-删除该目录不影响宿主的其他部分，但会丢失全部记录且不可恢复。先备份再删。
+Deleting that directory does not affect the rest of the host, but it destroys every record irreversibly. Back it up before deleting.
 
-## 故障排查
+## Troubleshooting
 
-| 症状 | 可能原因 | 处置 |
+| Symptom | Likely cause | Action |
 | --- | --- | --- |
-| 宿主启动时报 schema 或参数错误 | 宿主版本与工具契约不匹配 | 见 `test/tool-schema.test.mjs` 中的三条事实；不要改成标准 JSON Schema，那会使插件无法加载 |
-| 工具列表中没有 `mpm_*` | 组合行条目未生效、路径错误、或缩进错误 | 按上文「验证」逐条核对；路径必须指向 `engine/host.js` |
-| 快照有运行期行但没有自我快照 | 引擎已加载，装配失败 | 查宿主日志中 `[mpm]` 前缀的输出 |
-| 经网关调用 Gemini 返回 400 | 不是本插件的问题 | 见 README 的「已知问题」一节与 [issue #1](https://github.com/NBagent-dev/metaflywheel/issues/1) |
+| Host reports a schema or parameter error on boot | host version does not match the tool contract | see the three facts in `test/tool-schema.test.mjs`; do not switch to standard JSON Schema, that makes the plugin fail to load |
+| No `mpm_*` tools in the tool list | composition entry not in effect, wrong path, or wrong indentation | check each row of "Verify the mount"; the path must point to `engine/host.js` |
+| Runtime line present but no self-snapshot | loaded, assembly failed | check the host log for output prefixed `[mpm]` |
+| Gemini through a gateway returns 400 | not a problem in this plugin | see the README's "Known issue" section and [issue #1](https://github.com/NBagent-dev/metaflywheel/issues/1) |
