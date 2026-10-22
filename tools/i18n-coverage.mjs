@@ -64,6 +64,19 @@ for (const L of ['zh', 'en']) {
   });
 }
 
+// ②b 节律那一行（快照里也每轮出现）
+const RHY = await load('rhythm.mjs');
+const RSTATE = { rhythm: { staleMinutes: 90, fireThrottleMinutes: 45, quietFrom: 23, quietTo: 8, valenceFloor: 40 } };
+for (const L of ['zh', 'en']) {
+  rows.push({ surface: '快照·节律行（rhythmLine）', locale: L, cjk: cjkCount(RHY.rhythmLine(RSTATE, L)) });
+}
+
+// ②c 巡检：**不作为字符数计入**（要跑一轮巡检才有真输出，而那是巨重的注入）。
+//   改为静态计数：还有多少处 push 直接写字面量（应为 0，由 patrol-i18n 判据守）。
+const patrolSrc = fs.readFileSync(path.join(MOD, 'patrol.mjs'), 'utf8');
+const literalPushes = (patrolSrc.match(/(signals|proposals)\.push\((?!S\()/g) || []).length;
+const keyedPushes = (patrolSrc.match(/(signals|proposals)\.push\(S\('/g) || []).length;
+
 // ③ 参考：源码里还剩多少"渲染行"（**不作分母**）
 let srcLines = 0;
 for (const f of fs.readdirSync(MOD)) {
@@ -92,3 +105,7 @@ console.log('  已渲染面合计  zh ' + zhTotal + ' → en ' + enTotal
 console.log('');
 console.log('  ★参考（不作分母）：源码里还剩 ' + srcLines + ' 行含中文的渲染代码；');
 console.log('    多数是 zh 分支里的字面量 —— 是否"用户还看得见"，以上面 en 的实测为准。');
+console.log('');
+console.log('  巡检（patrol）：信号 ' + keyedPushes + ' 处走 S() · 直接写字面量 ' + literalPushes + ' 处');
+console.log('    —— 它不进上面的字符数（跑一轮巡检才出真输出，注入太重）；');
+console.log('       它的守门人是 test/patrol-i18n.test.mjs（字面量处数必须为 0）。');
