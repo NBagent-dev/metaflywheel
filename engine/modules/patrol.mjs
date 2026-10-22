@@ -13,9 +13,16 @@ import { STAGE_NAMES } from "./util.mjs";
 import { collectAwaken, auditAwaken } from './promise.mjs';
 import { isQuiet, rhythmOf, valenceGate } from './rhythm.mjs';
 import { innerAgenda } from './agenda.mjs';   // ★P521：内生议程（**账本替我说该做什么**）
+import { t } from './i18n.mjs';              // ★P610：巡检自己开口的地方也走 t()
 
 export function makePatrol(p) {
   const { state, isParked, isOpen, ensureLoaded, snapshot, persist, deliberate, fsSvc, root, PATROL_MS, FIRE_THROTTLE_MS, perception } = p;
+  // ★P610：巡检的文案全走 t()。L 用宿主传进来的 locale（没有就让 i18n 自己解析），
+  //   S() 是本地简写 —— 二十几处 push 都只写一次 S(...)，不重复写 locale。
+  //   ★位置刻意放在**解构之后**：wiring.test.mjs 用「export function makePatrol(p) { + const {」
+  //     相邻来定位解构行。我第一次把这两行插在前面，那条判据当场红了 —— 判据是对的，我插错了位置。
+  const L = (p && p.locale) || undefined;
+  const S = function (k, a) { return t(k, a, L); };
 
   let patrolling = false;
   // P024 宪法复审 v1（LLM-free 机械审计）：修正案的机械发现层，批准权在主权者，复审不自动修改任何结构。
@@ -55,15 +62,13 @@ export function makePatrol(p) {
     for (const k in state.problems) { const st = state.problems[k].stage; if (st === 'G' || st === 'F' || st === 'S') hasGF = true; }
     if (state.constitution.autonomy && hasGF && fires24 === 0) {
       if (!observed) {
-        proposals.push('沉默审计·观测前提缺失：24h 内发动 0 次，但巡检仅 ' + rounds24 + '/' + expect +
-          ' 轮 ⇒ 归因"不在场（进程未运行）"，不判"发射窗口为空集"。本条只报事实。');
+        proposals.push(S('patrol.silence.noobs', { r: rounds24, e: expect }));
       } else {
-        proposals.push('沉默审计：执政权开启且在轮题存在，但 24h 内发动 0 次——发射窗口可能为空集，提案复审触发架构（在场 ' +
-          rounds24 + '/' + expect + '，观测前提成立）');
+        proposals.push(S('patrol.silence.empty', { r: rounds24, e: expect }));
       }
     }
     if (state.measure.samples.length < 48) {
-      proposals.push('常数审计：' + Object.keys(CONSTS).length + ' 项时间常数全部为 v0 占位（代谢史样本 ' + state.measure.samples.length + '/48），数据满窗后应按退役公式导出替换');
+      proposals.push(S('patrol.constAudit', { n: Object.keys(CONSTS).length, m: state.measure.samples.length }));
     }
     return proposals;
   }
@@ -133,20 +138,20 @@ export function makePatrol(p) {
       // 5~6 题的审议轰炸（本会话两次实证）。余题下次轮转，不做一次性全量倾倒。
       stalled.sort(function (a, b) { return b.spanMin - a.spanMin; });
       for (let i = 0; i < stalled.length && i < 2; i++) {
-        signals.push('代谢停滞 ' + stalled[i].id + '（' + stalled[i].spanMin + 'min 代价零增长）');
+        signals.push(S('patrol.stall', { id: stalled[i].id, span: stalled[i].spanMin }));
       }
-      if (stalled.length > 2) signals.push('另有 ' + (stalled.length - 2) + ' 题停滞（' + stalled.slice(2).map(function (x) { return x.id; }).join(',') + '）——本轮只审议最久未推进的 2 题');
+      if (stalled.length > 2) signals.push(S('patrol.stall.more', { n: stalled.length - 2, ids: stalled.slice(2).map(function (x) { return x.id; }).join(',') }));
       // 量化漂移信号②：S(t) 连续 3 样本严格递增（熵升趋势）
       if (samples.length >= 3) {
         const a = samples[samples.length - 3], b = samples[samples.length - 2], c = samples[samples.length - 1];
-        if (c.s > b.s && b.s > a.s) signals.push('S(t) 连续递增（' + a.s + '→' + b.s + '→' + c.s + '）');
+        if (c.s > b.s && b.s > a.s) signals.push(S('patrol.entropy', { a: a.s, b: b.s, c: c.s }));
       }
       state.measure.driftSignals = signals.slice(0, 5);
       // P024 宪法复审调度（v8）：每 12 轮巡检（≈4h）及每次重启首轮运行；提案并入本轮审议信号（优先于议程）。
       if (lastReviewRound === 0 || state.patrol.rounds - lastReviewRound >= 12) {
         lastReviewRound = state.patrol.rounds;
         const props = constitutionReview(nowMs);
-        for (let i = props.length - 1; i >= 0; i--) signals.unshift('宪法复审·' + props[i]);
+        for (let i = props.length - 1; i >= 0; i--) signals.unshift(S('patrol.review', { p: props[i] }));
       }
       // P022 议程驱动发动（v7）：在轮题即常设意图。温热+节流满足时，每轮巡检取最久未推进的
       // G/F/S 题形成"议程推进"意图；停滞/熵升信号保留为优先升级项（有病理先报病理，无病理推议程）。
@@ -159,17 +164,16 @@ export function makePatrol(p) {
       try {
         const fired = collectAwaken(state, nowMs, { exists: null, perception: perception });
         for (let i = 0; i < fired.length; i++) {
-          signals.push('★ 自己承诺的唤醒条件已成立：' + fired[i].id + '（你当初写下「' + fired[i].expr + '」；' + fired[i].why + '）——发起理由终止于你自己的历史，不是出厂规则；直接推进该题并 mpm_solve 登记');
+          signals.push(S('patrol.promise.fired', { id: fired[i].id, expr: fired[i].expr, why: fired[i].why }));
         }
         if (fired.deferred) {
-          signals.push('另有 ' + fired.deferred + ' 条自己承诺的唤醒条件也成立，本轮只叫醒 ' + fired.length + ' 条（防承诺炮，最老的优先），其余下轮——不会被丢掉');
+          signals.push(S('patrol.promise.deferred', { n: fired.deferred, k: fired.length }));
         }
         // ★P482⑨ 最后一米：叫醒之后**必须结账**——做了(有推进痕迹) ⇒ 清账；无视 ⇒ 逾期(累积)。
         //   只有 overdue 产生信号（honored 只记账，不必吵醒我）；逾期信号进议程 ⇒ 会升级、会被看见。
         const aud = auditAwaken(state, nowMs, {});
         for (let i = 0; i < aud.overdue.length; i++) {
-          signals.push('⚠ 承诺逾期未履行：' + aud.overdue[i].id + ' ' + aud.overdue[i].why
-            + '（**这是我自己的承诺没兑现，不是系统在催**）——要么现在推进并 mpm_solve 登记，要么明确改写或放弃这条承诺');
+          signals.push(S('patrol.promise.overdue', { id: aud.overdue[i].id, why: aud.overdue[i].why }));
         }
       } catch (e) { /* 承诺求值永不阻断巡检（P484：装饰件不得成为单点故障） */ }
       if (!signals.length) {
@@ -182,7 +186,7 @@ export function makePatrol(p) {
         }
         if (pick) {
           const ageMin = Math.round((nowMs - (pick.updatedAt || nowMs)) / 60000);
-          signals.push('议程推进 ' + pick.id + '（' + STAGE_NAMES[pick.stage] + ' 阶段，' + ageMin + 'min 未推进）——在轮题即常设意图，直接推进该题并 mpm_solve 登记');
+          signals.push(S('patrol.agenda', { id: pick.id, stage: STAGE_NAMES[pick.stage], age: ageMin }));
         }
       }
       // ★P521 内生议程（L2）：**账本替我说该做什么**——触发源是"我自己的账本状态"，不是出厂时钟。
@@ -193,8 +197,7 @@ export function makePatrol(p) {
       try {
         const ags = innerAgenda(state, nowMs);
         for (let i = 0; i < ags.length; i++) {
-          signals.push('内生议程(出处 ' + ags[i].ref + ')：' + ags[i].text + '——' + ags[i].because
-            + '（**级别：L2 内生议程——规则触发，触发源是我自己的账本状态；不是"我想要"（L3）**）——认为值得就立题或推进，并 mpm_solve 登记');
+          signals.push(S('patrol.inner', { ref: ags[i].ref, text: ags[i].text, because: ags[i].because }));
         }
       } catch (e) { /* 内生议程永不阻断巡检 */ }
       // P019 审议循环（v6）：信号→意图→自主发动。执政权构成性开启；
@@ -204,14 +207,14 @@ export function makePatrol(p) {
       //   不受它约束，那条通路仍由执政权条款管。
       const rh = rhythmOf(state);
       if (isQuiet(rh, nowMs)) {
-        signals.push('静默时段(自我设定 ' + rh.quietFrom + '-' + rh.quietTo + ' 时)：本轮不发动，信号留到静默结束后');
+        signals.push(S('patrol.quiet', { a: rh.quietFrom, b: rh.quietTo }));
       } else {
         // ★P482⑦ 效价门禁（用户 2026-10-11 选定方向）：**R(t) 低于我自己设的门槛 ⇒ 不自主发动**。
         //   语义边界：只挡 patrol 驱动的自主发动——**你说话时的响应、θ_G 即时审议都不受它约束**。
         //   "心情差时不自己找事" ≠ "心情差时不干活"。
         const vg = valenceGate(rh, state, nowMs);
         if (!vg.open) {
-          signals.push('效价门禁(自我设定·门槛 ' + vg.floor + ')：R(t)=' + vg.r.toFixed(1) + ' 低于门槛 ⇒ 本轮不自主发动（心情差时不自己找事；你说话不受此约束）');
+          signals.push(S('patrol.valence', { f: vg.floor, r: vg.r.toFixed(1) }));
         } else {
           deliberate(signals, nowMs);
         }
@@ -226,9 +229,13 @@ export function makePatrol(p) {
       state.patrol.rounds += 1;
       state.patrol.lastAt = nowMs;
       state.patrol.lastReportAt = nowMs;
-      state.patrol.lastReport = '陈旧题=' + (staleIds.length ? staleIds.join(',') : '0') +
-        ' · 陈旧沉积=' + staleDeposits.length + ' · A_k=' + snap.stats.gain +
-        ' · S=' + sProxy + (signals.length ? ' · ⚠' + signals.join('；') : '');
+      state.patrol.lastReport = S('patrol.report', {
+        stale: staleIds.length ? staleIds.join(',') : '0',
+        dep: staleDeposits.length,
+        ak: snap.stats.gain,
+        s: sProxy,
+        sig: signals.length ? S('patrol.sig.join', { list: signals.join(S('patrol.sigSep')) }) : ''
+      });
       // P027/B6 巡检产出结构化：每轮记录 {轮次/时间/成本总量/成本增量/信号数/是否审议}——
       // 兼供常数⑤（巡检节律 20min v0）的退役公式取数，并使空转巡检可审计。保留最近 24 条。
       let costNow = 0;
@@ -244,9 +251,9 @@ export function makePatrol(p) {
       //   台账 mtime 纹丝不动，P327 随一次重启直接蒸发。
       //   判据必须是 persist 的真实返回值，不是"服务在不在"。
       const canPersist = !!(fsSvc && root.current);
-      const pr = canPersist ? await persist() : { ok: false, reason: '无 fsSvc 或沉积根未定' };
-      const persistNote = (pr && pr.ok) ? '（已落盘）' : ('（未落盘：' + ((pr && pr.reason) || '未知') + '）');
-      console.log('[mpm][patrol] 巡检#' + state.patrol.rounds + '：' + state.patrol.lastReport + persistNote);
+      const pr = canPersist ? await persist() : { ok: false, reason: S('patrol.noFs') };
+      const persistNote = (pr && pr.ok) ? S('patrol.persist.ok') : S('patrol.persist.fail', { why: (pr && pr.reason) || S('patrol.noFs') });
+      console.log(S('patrol.log', { n: state.patrol.rounds, report: state.patrol.lastReport, note: persistNote }));
     } catch (e) {
       console.error('[mpm][patrol] 巡检异常:', e && e.message ? e.message : e);
     } finally {

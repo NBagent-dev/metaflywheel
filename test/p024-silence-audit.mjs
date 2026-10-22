@@ -19,6 +19,12 @@ for (; j < src.length; j++) {
 const fnSrc = src.slice(at, j);
 const PATROL_MS = 20 * 60 * 1000;
 const CONSTS = { PATROL_MS: 1, OTHER: 2 };
+// ★P610：constitutionReview 的文案改走 t()（本地简写 S）。而本判据是**把函数源码切出来
+//   用 new Function 求值**的 —— 那种求值只能看到全局作用域，看不到 patrol.mjs 的模块作用域。
+//   ⇒ 所以这里把 S 挂到 globalThis 上（测试脚手架，不是产品代码）。它让"切源码求值"这个
+//     手段继续可用，同时函数体本身仍然只依赖 t()，不依赖我额外塞进去的私有变量。
+const { t } = await import('../engine/modules/i18n.mjs');
+globalThis.S = function (k, a) { return t(k, a, 'zh'); };
 const call = new Function('state', 'PATROL_MS', 'CONSTS', 'nowMs',
   'return (' + fnSrc + ')(nowMs);');
 

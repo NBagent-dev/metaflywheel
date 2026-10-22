@@ -49,7 +49,29 @@ const TABLES = {
     'rhythm.gate.pass': 'R(t)={r} ≥ 门槛 {f}',
     'rhythm.gate.block': 'R(t)={r} 低于门槛 {f}',
     'rhythm.reject.unknown': '{k}：不认识的项',
-    'rhythm.reject.range': '{k}={v}：越界或非整数（允许 {a}~{b}）'
+    'rhythm.reject.range': '{k}={v}：越界或非整数（允许 {a}~{b}）',
+    // ★P610 巡检（patrol）自己开口的地方：报告行 + 全部信号
+    'patrol.report': '陈旧题={stale} · 陈旧沉积={dep} · A_k={ak} · S={s}{sig}',
+    'patrol.sig.join': ' · ⚠{list}',
+    'patrol.sigSep': '；',
+    'patrol.persist.ok': '（已落盘）',
+    'patrol.persist.fail': '（未落盘：{why}）',
+    'patrol.noFs': '无 fsSvc 或沉积根未定',
+    'patrol.log': '[mpm][patrol] 巡检#{n}：{report}{note}',
+    'patrol.silence.noobs': '沉默审计·观测前提缺失：24h 内发动 0 次，但巡检仅 {r}/{e} 轮 ⇒ 归因"不在场（进程未运行）"，不判"发射窗口为空集"。本条只报事实。',
+    'patrol.silence.empty': '沉默审计：执政权开启且在轮题存在，但 24h 内发动 0 次——发射窗口可能为空集，提案复审触发架构（在场 {r}/{e}，观测前提成立）',
+    'patrol.constAudit': '常数审计：{n} 项时间常数全部为 v0 占位（代谢史样本 {m}/48），数据满窗后应按退役公式导出替换',
+    'patrol.stall': '代谢停滞 {id}（{span}min 代价零增长）',
+    'patrol.stall.more': '另有 {n} 题停滞（{ids}）——本轮只审议最久未推进的 2 题',
+    'patrol.entropy': 'S(t) 连续递增（{a}→{b}→{c}）',
+    'patrol.review': '宪法复审·{p}',
+    'patrol.promise.fired': '★ 自己承诺的唤醒条件已成立：{id}（你当初写下「{expr}」；{why}）——发起理由终止于你自己的历史，不是出厂规则；直接推进该题并 mpm_solve 登记',
+    'patrol.promise.deferred': '另有 {n} 条自己承诺的唤醒条件也成立，本轮只叫醒 {k} 条（防承诺炮，最老的优先），其余下轮——不会被丢掉',
+    'patrol.promise.overdue': '⚠ 承诺逾期未履行：{id} {why}（**这是我自己的承诺没兑现，不是系统在催**）——要么现在推进并 mpm_solve 登记，要么明确改写或放弃这条承诺',
+    'patrol.agenda': '议程推进 {id}（{stage} 阶段，{age}min 未推进）——在轮题即常设意图，直接推进该题并 mpm_solve 登记',
+    'patrol.inner': '内生议程(出处 {ref})：{text}——{because}（**级别：L2 内生议程——规则触发，触发源是我自己的账本状态；不是"我想要"（L3）**）——认为值得就立题或推进，并 mpm_solve 登记',
+    'patrol.quiet': '静默时段(自我设定 {a}-{b} 时)：本轮不发动，信号留到静默结束后',
+    'patrol.valence': '效价门禁(自我设定·门槛 {f})：R(t)={r} 低于门槛 ⇒ 本轮不自主发动（心情差时不自己找事；你说话不受此约束）'
   },
   en: {
     'hits.head': '- Hit feedback loop (P519·**source→behaviour→record→source**): {total} hits · **{open} undisposed**',
@@ -84,7 +106,29 @@ const TABLES = {
     'rhythm.gate.pass': 'R(t)={r} >= floor {f}',
     'rhythm.gate.block': 'R(t)={r} below floor {f}',
     'rhythm.reject.unknown': '{k}: unknown key',
-    'rhythm.reject.range': '{k}={v}: out of range or not an integer (allowed {a}~{b})'
+    'rhythm.reject.range': '{k}={v}: out of range or not an integer (allowed {a}~{b})',
+    // ★P610 where patrol speaks for itself: the report line and every signal
+    'patrol.report': 'stale problems={stale} · stale deposits={dep} · A_k={ak} · S={s}{sig}',
+    'patrol.sig.join': ' · ⚠{list}',
+    'patrol.sigSep': '; ',
+    'patrol.persist.ok': ' (persisted)',
+    'patrol.persist.fail': ' (NOT persisted: {why})',
+    'patrol.noFs': 'no fsSvc, or the sediment root is undetermined',
+    'patrol.log': '[mpm][patrol] patrol #{n}: {report}{note}',
+    'patrol.silence.noobs': 'Silence audit, missing observation premise: 0 fires in 24h, but only {r}/{e} patrol rounds ⇒ attributed to "not present (process not running)", NOT judged as "empty launch window". This line reports facts only.',
+    'patrol.silence.empty': 'Silence audit: executive power is on and open problems exist, yet 0 fires in 24h - the launch window may be empty; proposing a review of the trigger architecture (present {r}/{e}, observation premise holds)',
+    'patrol.constAudit': 'Constant audit: {n} time constants are all v0 placeholders (metabolic samples {m}/48); once the sample window fills they should be derived by the retirement formula',
+    'patrol.stall': 'Metabolic stall {id} ({span}min with zero cost growth)',
+    'patrol.stall.more': '{n} more stalled ({ids}) - only the 2 longest-stalled are deliberated this round',
+    'patrol.entropy': 'S(t) rising for three consecutive samples ({a}→{b}→{c})',
+    'patrol.review': 'Constitutional review · {p}',
+    'patrol.promise.fired': '★ A wake condition you promised yourself has come true: {id} (you wrote "{expr}"; {why}) - the reason ends in your own history, not in a factory rule; advance that problem and register it with mpm_solve',
+    'patrol.promise.deferred': '{n} more promised wake conditions also hold; only {k} are awakened this round (oldest first, to avoid a promise barrage), the rest next round - none are dropped',
+    'patrol.promise.overdue': '⚠ Promise overdue: {id} {why} (**this is my own promise unfulfilled, not the system nagging**) - either advance it now and register with mpm_solve, or explicitly rewrite or drop the promise',
+    'patrol.agenda': 'Agenda advance {id} ({stage} stage, {age}min without progress) - an open problem is a standing intention; advance it and register with mpm_solve',
+    'patrol.inner': 'Endogenous agenda (source {ref}): {text} - {because} (**level: L2 endogenous agenda - rule-triggered from my own ledger state; not "I want" (L3)**) - open a problem or advance it if it is worth it, and register with mpm_solve',
+    'patrol.quiet': 'Quiet hours (self-set {a}-{b}h): no fire this round; the signals are kept until quiet hours end',
+    'patrol.valence': 'Valence gate (self-set, floor {f}): R(t)={r} is below the floor ⇒ no self-initiated fire this round (I do not go looking for work when low; your messages are not restricted by this)'
   }
 };
 
