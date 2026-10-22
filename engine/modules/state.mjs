@@ -7,6 +7,9 @@
 // root/adopted/diag/state 由宿主创建后传入（宿主所有权），模块只读取/变更、不重建。
 // 铁律：只做「闭包→参数化」机械变换——函数体一字未动（自由变量改由 e 绑定），阈值/文案/流程不变。
 
+// ★P604：运行时语言覆盖（读 <root>/.mpm/locale 后写入它，见 restore 内）
+import { setLocaleOverride } from './i18n.mjs';
+
 // ── 纯函数（无自由变量，保持无 e 签名）─────────────────
 function norm(p) { return String(p).replace(/\\/g, '/').replace(/\/+$/, ''); }
 function hintFile(r) { return r + '/.mpm/root-hint.json'; }
@@ -139,6 +142,17 @@ async function restoreImpl(e) {
   }
   if (best) {
     e.root.current = best.root;
+    // ★P604：运行时语言开关 —— 读 `<root>/.mpm/locale`（一行）。写这个文件即切换，**不需重启**。
+    //   · 为什么挂在这里：这是"沉积根刚确定"的唯一位置；语言属于渲染层，但它需要一个家。
+    //   · 为什么读不到也不报错：语言文件是可选的，缺它就用默认；**一个可选配置不许拦住加载**。
+    //   · 为什么不在这里也读环境变量：那由 resolveLocale 自己负责（优先级只该有一处）。
+    try {
+      if (e.fsSvc && typeof e.fsSvc.readText === 'function') {
+        const lf = await e.fsSvc.resolve(norm(e.root.current) + '/.mpm/locale');
+        const txt = await e.fsSvc.readText(lf);
+        if (txt && String(txt).trim()) setLocaleOverride(String(txt).trim().split(/\r?\n/)[0]);
+      }
+    } catch (err) { /* 没有 locale 文件 ⇒ 保持默认语言 */ }
     e.state.seq = best.data.seq || 0;
     e.state.problems = best.data.problems || {};
     e.state.sediments = Array.isArray(best.data.sediments) ? best.data.sediments : [];

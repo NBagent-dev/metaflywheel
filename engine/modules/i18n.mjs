@@ -45,13 +45,34 @@ const TABLES = {
 };
 
 /**
- * 解析 locale：显式参数 > 环境变量 > 默认 zh。
+ * ★P604 运行时语言切换：模块级覆盖值。
+ *
+ * 为什么需要它：`MPM_LOCALE` 只有进程启动时设一次 —— 而"发布给全球用户"的产品里，
+ * 切语言不该需要重启整个宿主。所以多一层：引擎在读沉积根时顺带读 `<root>/.mpm/locale`
+ * （一行字），写文件 ⇒ **下一次调用生效，不重启**。
+ *
+ * ★优先级刻意是 **显式参数 > 环境变量 > 本覆盖 > 默认 zh**：
+ *   环境变量代表"运维已经决定了"，不该被一个文件悄悄盖掉；显式参数代表"这一次调用要什么"。
+ */
+let overrideLocale = '';
+
+/** 设置/清空运行时覆盖（非字符串或空串 ⇒ 清空）。返回落地值（未归一化）。 */
+export function setLocaleOverride(v) {
+  overrideLocale = (typeof v === 'string' && v.trim()) ? v.trim() : '';
+  return overrideLocale;
+}
+
+/** 当前覆盖值（供诊断：语言是谁定的）。 */
+export function getLocaleOverride() { return overrideLocale; }
+
+/**
+ * 解析 locale：显式参数 > 环境变量 > 运行时覆盖 > 默认 zh。
  * 归一化：zh-CN / zh_CN / ZH → zh；不认识的 → 默认（★不静默崩，也不静默变英文）。
  */
 export function resolveLocale(explicit) {
   const raw = (typeof explicit === 'string' && explicit.trim())
     ? explicit
-    : (process.env.DSH_MPM_LOCALE || process.env.MPM_LOCALE || '');
+    : (process.env.DSH_MPM_LOCALE || process.env.MPM_LOCALE || overrideLocale || '');
   const norm = String(raw || '').trim().toLowerCase().split(/[-_]/)[0];
   return (norm && TABLES[norm]) ? norm : DEFAULT_LOCALE;
 }
