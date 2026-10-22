@@ -45,8 +45,32 @@ function discoverTracked() {
 }
 const TRACKED = discoverTracked();
 
+/**
+ * sha256（★P603：**先归一行尾再哈希**）
+ *
+ * 为什么必须归一：仓库里存 LF，而 Windows 的 `core.autocrlf=true` 会把工作树写成 CRLF。
+ * 于是同一个文件在两处"字节不同"，而 Node 加载它们的行为**完全一样**。
+ * ⇒ 判据要守的是"重启会不会加载到同一份代码"，不是"行尾是不是同一个习惯"。
+ * ⇒ 所以：**归一行尾后比较**；若归一时发现差异消失，打印 INFO 说明只是行尾不同。
+ */
 function sha256(p) {
-  return crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex').slice(0, 16);
+  return crypto.createHash('sha256').update(normalizeEol(fs.readFileSync(p))).digest('hex').slice(0, 16);
+}
+
+/** CRLF / CR → LF。二进制安全：只替换字节序列，不做字符串解码。 */
+function normalizeEol(buf) {
+  const out = Buffer.allocUnsafe(buf.length);
+  let n = 0;
+  for (let i = 0; i < buf.length; i++) {
+    const b = buf[i];
+    if (b === 0x0d) {                       // \r
+      if (buf[i + 1] === 0x0a) continue;     // \r\n ⇒ 丢掉 \r，\n 下一轮写入
+      out[n++] = 0x0a;                       // 单个 \r ⇒ \n
+      continue;
+    }
+    out[n++] = b;
+  }
+  return out.subarray(0, n);
 }
 
 /**

@@ -1,0 +1,28 @@
+# 行尾必须由仓库说了算 —— 否则"本地绿、别人 clone 红"是必然的
+#
+# ★为什么需要这个文件（P603，2026-10-22 实测）：
+#   仓库里存的是 LF，而 Windows 的 core.autocrlf=true 让工作树变成 CRLF；
+#   于是 `engine-sync` 判据在我机器上"恰好一致"（两边都是 CRLF），
+#   而别人 clone 下来是 LF ⇒ 同一条判据在干净树上红。
+#   ⇒ **一个判据的正确性依赖"我机器上的行尾习惯"，它就不是判据，是巧合。**
+#   ⇒ 所以行尾必须写进仓库：文本一律 LF，二进制一律标出来。
+#
+# 注意：不要把 *.mjs 之外的东西漏掉 —— 用 `* text=auto` 让 git 自己判断，
+# 再单独钉死需要幂等的东西（md/mjs/json/yml 都是 LF，二进制不做转换）。
+* text=auto eol=lf
+
+*.mjs   text eol=lf
+*.js    text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.sh    text eol=lf
+
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.zip   binary
+*.pq    binary
+*.gz    binary
