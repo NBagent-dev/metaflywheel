@@ -118,7 +118,10 @@ test('稳定性·非法输入：所有工具在缺参数/错参数下必须返�
     'mpm_micro', 'mpm_setroot', 'mpm_grant', 'mpm_narrate',
     // ★P517：录入委托人的思考方式（写入类）。空参必须拒绝——**这是"我替他记东西"的唯一入口**，
     //   最不能允许它悄悄写一条空条目。登记它同时也是本条判据的用途：新增工具必须在这里露一次面。
-    'mpm_principal'];
+    'mpm_principal',
+    // ★P591：沉积的「被取代」（写入类）——空参必须拒绝：它要改的是**已固化的判断**，
+    //   最不能允许"什么都没说"就动一条沉积的状态。登记它也是本条判据的用途所在。
+    'mpm_supersede'];
   // ★P517③：未核清单——**空参=list（只读查询）**，与 mpm_rhythm 空参=show 同类；
   //   写入路径（add/resolve）缺参时由工具自身返回 ok:false，已由 unknowns.test.mjs 覆盖。
   // ★P519：回流——空参=list（只读查询）；dispose 缺 myAction 时由工具自身返回 ok:false，已由 hits.test.mjs 覆盖。

@@ -141,6 +141,13 @@ async function restoreImpl(e) {
     e.state.seq = best.data.seq || 0;
     e.state.problems = best.data.problems || {};
     e.state.sediments = Array.isArray(best.data.sediments) ? best.data.sediments : [];
+    // ★P591：沉积的「被取代」状态缺省为 active。旧账本里所有记录都没有这个字段，
+    //   在**加载时**补齐（而不是让每个读到它的地方各自兜底）——否则"没有字段"与"非 active"
+    //   会分不清，而后者会让 isRetired 一夜之间把整个库房判成退休（无报错、只是检索突然空）。
+    for (let i = 0; i < e.state.sediments.length; i++) {
+      const s0 = e.state.sediments[i];
+      if (s0 && typeof s0 === 'object' && !s0.status) s0.status = 'active';
+    }
     // ★P500 的第五个实例：对象型字段**白名单重建**比"漏读"更隐蔽——它不报错，只是让新字段静默消失。
     //   实机症状：`measure.promiseStats`（承诺履行累计）每次重启归零 ⇒ 快照出现
     //   「已叫醒 1 · 已履行 0」的**呈现失真**（明明履行过，看起来像没履行）。

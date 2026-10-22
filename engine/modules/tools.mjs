@@ -7,6 +7,7 @@
 // 铁律：只做「闭包→参数化」机械变换，判据/文案/阈值/流程一字未动。
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { phiOf, revisionOf } from "./util.mjs";
+import { SEDIMENT_STATUS, applySupersedes, statusSummary } from "./sediment-status.mjs";  // ★P591：沉积的「被取代」（ADR 式）
 import { sedimentCacheGet, retrieveTop } from "./retrieval.mjs";
 import { persistNote } from "./state.mjs";
 import { rhythmOf, normalizeRhythm, rhythmLine } from "./rhythm.mjs";
@@ -958,6 +959,45 @@ export function makeTools(deps) {
         } },
       ['problemId', 'delta', 'epsilon', 'robustness'],
       (args, exec) => toolConverge(d, args, exec)
+    ),
+    mkTool(
+      'mpm_supersede',
+      'ADR 式「被取代」：把一条沉积标成 superseded/refuted/active。★退休 ≠ 删除——标题、正文、路径一概不动，它仍可按 ID 查到，只是不再参与后续判断。为什么需要：沉积不可变但**会过时**；没有这个状态时，同一件事的三代沉积并列存在，检索与注入都不知道谁作废了（实测：P583-M477 已部分取代 P572-M473，而账本里无处表达）。',
+      { properties: {
+          sedimentId: { type: 'string', description: '要改状态的沉积 ID，如 P572-M473' },
+          status: { type: 'string', description: 'superseded(被取代) | refuted(被否证) | active(恢复现役)；只认这三个值' },
+          bySedimentId: { type: 'string', description: '取代它的那条沉积 ID（status=superseded 时建议填；必须是已存在的 ID，否则拒绝）' },
+          reason: { type: 'string', description: '为什么——必填，留痕用（没理由的状态变更等于没说清）' }
+        } },
+      ['sedimentId', 'status', 'reason'],
+      async (args) => {
+        args = args || {};                                    // ★稳定性判据：缺参数/错参数不许抛，必须返回 ok:false
+        const st = String(args.status || '').trim();
+        if (SEDIMENT_STATUS.indexOf(st) < 0) {
+          return { ok: false, report: 'status 只认 ' + SEDIMENT_STATUS.join(' / ') + '，收到「' + st + '」' };
+        }
+        const list = Array.isArray(d && d.state && d.state.sediments) ? d.state.sediments : [];
+        const sid = String(args.sedimentId || '').trim();
+        const hit = list.find(function (x) { return x && x.id === sid; });
+        if (!hit) return { ok: false, report: '找不到沉积 ' + sid + '（只按 ID 精确匹配，不猜）' };
+        const by = String(args.bySedimentId || '').trim();
+        if (st === 'superseded' && by) {
+          const byOk = list.some(function (x) { return x && x.id === by; });
+          if (!byOk) return { ok: false, report: 'bySedimentId 指向不存在的沉积：' + by + '（取代者必须也已沉积）' };
+          if (by === sid) return { ok: false, report: '一条沉积不能取代它自己' };
+        }
+        const done = applySupersedes(list, by || null, [sid], st, String(args.reason || ''));
+        if (done.skipped && done.skipped.length) {
+          return { ok: false, report: '未应用（skipped=' + done.skipped.join(',') + '）' };
+        }
+        const pr = (typeof d.persist === 'function') ? await d.persist() : { ok: false };
+        return { ok: true, report: '已把 ' + sid + ' 标为 ' + st
+          + (by ? '（取代者：' + by + '）' : '')
+          + '\n理由：' + String(args.reason || '').slice(0, 120)
+          + '\n★ 未删除：标题/正文/路径原样，仍可按 ID 查到；只是退出「现役」'
+          + '\n当前库房：' + statusSummary(list)
+          + '\n' + (pr && pr.ok ? '已落盘' : '⚠ 落盘未确认') };
+      }
     ),
     mkTool(
       'mpm_micro',
