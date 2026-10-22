@@ -218,7 +218,7 @@ node --test test/agenda.test.mjs   # 单个文件
 | # | 债 | 证据 | 建议 |
 |---|---|---|---|
 | 1 | **账本整份覆盖写** | 外部脚本改账本，约 10 分钟后被 whole-state persist 无声吞掉（两次） | 事件日志：persist 前把 diff 追加 `events.jsonl`（先不换主存储） |
-| 2 | **权重硬编码** | `agenda.mjs` 的 `weight: 40 + nObj` —— 不可见、不可调、不可归因 | 外置成配置表 + 每次打印各项贡献占比 |
+| 2 | ~~权重硬编码~~ **已修（P593）** | 四个来源权重外置到 `agenda-weights.mjs`；`mpm_weights show` 打印各来源贡献占比，单项 ≥60% 报警 | 参数仍在 state 里而非独立配置文件（够用，暂不迁移） |
 | 3 | ~~沉积会过时但无状态~~ **已修（P591 + P592）** | `status` + `mpm_supersede` + `selfsnap`/`retrieval` 过滤 + 缓存 key 覆盖 `retiredN` | 仅剩 md front-matter 未同步 status（账本已准，文件里还没写 `status:`） |
 | 4 | **检索靠字面** | 485 条沉积里 **332 条 >14 天从未被引用**（81%）；回环率 2.3% | A-MEM 式 `enriched` 侧车（追加 keywords/aliases，不改原文） |
 | 5 | **`heartbeat.mjs` 未接线** | `host.js` 两边都不 import 它 | 要么接进快照，要么删掉（别留着让人以为功能存在） |
@@ -244,7 +244,7 @@ node --test test/agenda.test.mjs   # 单个文件
 | 顺位 | 事项 | 状态 |
 |---|---|---|
 | 1 | 沉积 `status`（ADR 式被取代） | **已完成**（P591 数据层 + 工具；P592 注入/检索过滤 + 缓存 key） |
-| 2 | agenda 权重外置 + 贡献占比诊断 | 待做 |
+| 2 | agenda 权重外置 + 贡献占比诊断 | **已完成（P593）**：`mpm_weights` show/set/reset + 单项 ≥60% 报警 |
 | 3 | `events.jsonl` 增量日志 | 待做 |
 | 4 | `enriched` 侧车（关键词/别名） | 待做 |
 | 5 | 检索三项加权（相关/新近/重要） | 待做 |

@@ -7,7 +7,9 @@
 // 铁律：只做「闭包→参数化」机械变换，判据/文案/阈值/流程一字未动。
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { phiOf, revisionOf } from "./util.mjs";
-import { SEDIMENT_STATUS, applySupersedes, statusSummary } from "./sediment-status.mjs";  // ★P591：沉积的「被取代」（ADR 式）
+import { SEDIMENT_STATUS, applySupersedes, statusSummary } from "./sediment-status.mjs";
+import { normalizeAgendaWeights, breakdownLine } from "./agenda-weights.mjs";   // ★P593：议程权重外置 + 贡献占比诊断
+import { innerAgenda } from "./agenda.mjs";   // ★P593：mpm_weights show 要打印真实议程的占比  // ★P591：沉积的「被取代」（ADR 式）
 import { sedimentCacheGet, retrieveTop } from "./retrieval.mjs";
 import { persistNote } from "./state.mjs";
 import { rhythmOf, normalizeRhythm, rhythmLine } from "./rhythm.mjs";
@@ -195,6 +197,7 @@ const REQUIRED_STRINGS = {
   mpm_solve: ['problemId', 'action'],
   mpm_converge: ['problemId'],
   mpm_deposit: ['problemId', 'title', 'body'],
+  mpm_weights: [],   // ★P593：空参 = show（只读查询）；写入路径是 set，缺 weights 时由工具自身拒绝
   mpm_evoke: ['sedimentId', 'friction'],
   mpm_micro: ['title', 'statement', 'action'],
   mpm_setroot: ['path'],
@@ -997,6 +1000,47 @@ export function makeTools(deps) {
           + '\n★ 未删除：标题/正文/路径原样，仍可按 ID 查到；只是退出「现役」'
           + '\n当前库房：' + statusSummary(list)
           + '\n' + (pr && pr.ok ? '已落盘' : '⚠ 落盘未确认') };
+      }
+    ),
+    mkTool(
+
+      'mpm_weights',
+      '议程权重的可见化与可调化（Taskwarrior 式多项式）：show（默认）打印四个来源的**贡献占比**并对单项 ≥60% 报警；set 改系数（写进账本）；reset 回出厂。★调权重是调音量，不改变"谁有资格成为议程"——那些门槛（反复命中阈值 / 14 天 / 负控）仍在 agenda.mjs，不许通过调权重绕过。',
+      { properties: {
+          action: { type: 'string', description: 'show(默认) | set | reset' },
+          weights: { type: 'string', description: 'set 时给 JSON 字符串，如 {"hit-open":{"base":40,"per":1}}；缺省字段保持原值，非法值回退默认并报出' }
+        } },
+      [],
+      async (args) => {
+        args = args || {};
+        const act = String(args.action || 'show').trim();
+        if (act === 'show' || act === '') {
+          const W = normalizeAgendaWeights(d && d.state ? d.state.agendaWeights : null).weights;
+          const rows = Object.keys(W).map(function (k) { return '  ' + k + '：base ' + W[k].base + ' · per ' + W[k].per; });
+          let items = [];
+          try { items = innerAgenda(d.state); } catch (e) { items = []; }
+          return { ok: true, report: '当前议程权重（来源：' + ((d && d.state && d.state.agendaWeights) ? '我设定的' : '出厂默认，未调过') + '）\n'
+            + rows.join('\n') + '\n' + breakdownLine(items) };
+        }
+        if (act === 'set') {
+          let raw = null;
+          try { raw = JSON.parse(String(args.weights || '')); }
+          catch (e) { return { ok: false, report: 'weights 必须是合法 JSON 字符串；解析失败：' + (e && e.message ? e.message : '未知') }; }
+          const n = normalizeAgendaWeights(raw);
+          d.state.agendaWeights = n.weights;
+          const pr = (typeof d.persist === 'function') ? await d.persist() : { ok: false };
+          let items2 = [];
+          try { items2 = innerAgenda(d.state); } catch (e) { items2 = []; }
+          return { ok: true, report: '已更新议程权重' + (pr && pr.ok ? '（已落盘）' : '（⚠ 落盘未确认）')
+            + (n.problems.length ? '\n⚠ ' + n.problems.join('；') : '\n无非法值')
+            + '\n' + breakdownLine(items2) };
+        }
+        if (act === 'reset') {
+          delete d.state.agendaWeights;
+          const pr2 = (typeof d.persist === 'function') ? await d.persist() : { ok: false };
+          return { ok: true, report: '已恢复出厂议程权重（= 原来写死的那四个数）' + (pr2 && pr2.ok ? '（已落盘）' : '（⚠ 落盘未确认）') };
+        }
+        return { ok: false, report: 'action 只认 show / set / reset，收到「' + act + '」' };
       }
     ),
     mkTool(
