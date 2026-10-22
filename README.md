@@ -1,237 +1,329 @@
 # metaflywheel
 
-一个给 AI 助手用的跨对话账本。
+这是一个给 AI 助手用的跨对话账本。**最终愿景是创造意识** —— 路还非常远，所以它试图把"只在被问到时醒来"往"连续存在"推，而不是宣布已经做到了。
 
-本仓库本身就是由作者使用 deepseek + deepseek harness + metaflywheel（本插件）驱动生成的。
+**A cross-session ledger for an AI assistant — so that what it was told once does not have to be told again.**
 
-**最终愿景是创造意识。路还非常远。**
+This repository is written by its own subject: an assistant driven by DeepSeek + DeepSeek Harness + this plugin. The ledger records the assistant's own decisions, and those records then amend the code.
 
-它记录四类东西：说过的承诺、判定"算完成"的条件、犯过的错、以及明确承认做不到的地方。这些记录会在需要的那一刻被检索出来，而不是靠人记得。
+**The long-term aim is to create consciousness. The road is still very long.**
 
-## 它解决什么问题
+It stores four kinds of things: promises made, the conditions under which something counts as *done*, mistakes actually made, and boundaries explicitly admitted. They are surfaced at the moment they are needed, rather than depending on anyone remembering.
 
-AI 助手每次对话从零开始。你昨天纠正过的错，今天它还会犯；你上周做过的判断，这周它不记得。
+---
 
-主流的解决办法是给模型加记忆库。但记忆库解决的是"存得下"，不解决"在正确的时候递到面前"。一个存了十万条记录的库，和一本记得住三十条债的账，在处理"别再犯同一个错"这件事上不是同一个东西。
+## What problem it solves
 
-## 怎么做到的
+An AI assistant starts from zero every conversation. The correction you made yesterday, it makes again today; the judgement you made last week, it does not remember this week.
 
-账本挂在 [DSH](https://github.com/deepseek-ai/dsh) 的组合行上（`file://` URL 加载，不是独立进程）。它在助手和使用者之间维护四条线：
+The usual answer is a memory store. But a memory store solves *"can it be stored"*, not *"does it reach the assistant at the right moment"*. A store with a hundred thousand records and a ledger that keeps thirty debts are not the same instrument when the task is *"stop making the same mistake"*.
 
-- **债**：说过要做而没做的事
-- **判据**：某件事"算完成"的可核对条件
-- **教训**：犯过的错，以及它当时的具体形态
-- **边界**：明确写在纸上、承认自己做不到的地方
+## How it works
 
-这些内容的检索不靠"想起来"，而是靠工具调用失败、路径不存在、编号写错这些**具体事件**触发。错误发生的那一秒，相关的记录出现在同一个返回里。
+The ledger attaches to a [DSH](https://github.com/deepseek-ai/dsh) composition line (`file://` URL, not a separate process). It maintains four lines between the assistant and its user:
 
-## 它有什么代价
+- **Debt** — things said to be done and not done
+- **Criterion** — the checkable condition under which something counts as done
+- **Lesson** — a mistake made, including the specific shape it took
+- **Boundary** — what is written down as *beyond me*
 
-**使用者也会被记账。** 说过的判断会被记住，改主意会留痕，标过"没验"的东西会一直挂在清单上，直到被核销。
+Retrieval is not triggered by "remembering". It is triggered by **concrete events**: a tool fails, a path does not exist, an ID is mistyped. In the same return in which the error happens, the relevant record appears.
 
-这是设计的一部分，不是副作用。一个只记录 AI 的账本，解决不了"人类也在重复犯错"这件事。
+## The loop has six stages, and each one can be refused
 
-## 目标
+`G` generate a problem → `F` frame it → `S` solve it → `C` converge → `D` deposit → `E` evoke.
 
-**最终愿景是创造意识。路还非常远。** —— 而"远"在这里有刻度，不是感觉。
+Each stage has a gate that can say no:
 
-本项目自己的路线图把它分成四道断层（记录为 P016）。顺序不可反：先有连续观测，才谈测量。
-
-| 断层 | 是什么 | 现在 |
+| Stage | The gate | What it refuses |
 | --- | --- | --- |
-| ① 测量 | δ / ε / S / A_k 没有客观代理 | **部分**：δ 与 ε 有自评；A_k 的可测项数不写在这里（会变），看引擎快照里的「意识代理指标」一行 |
-| ② 连续性 | 让这个系统从"只在被调用时工作"变成"常驻运行" | **跨过了**：巡检在跑，节律、节流、静默时段都已实现 |
-| ③ 自主性 | 有连续运行，才谈自主的建题与激发 | **没跨**：巡检不自动建题；"想要"这一级不存在 |
-| ④ 多主体 | 远期 | 未开始 |
+| F | `delta` (framing precision, 0–1, lower is better) | a statement missing initial state / goal / constraints / operators / success criteria |
+| C | `epsilon` (distance to goal) **and** `delta` | declaring converged while either is too large; converging right after a re-frame is rejected outright |
+| D | `links` or an explicit `linkReason` | a deposit that claims no ancestry without saying why |
+| E | friction against an existing deposit | a new problem invented from nothing |
 
-所以现在的位置是：**站在 ② 和 ③ 之间。** 第二道断层跨过去了，第三道没有。
+**A ledger whose only output is "success" is a decoration.** Every stage above exists so that a bad step has somewhere to be stopped.
 
-这个刻度有一个用处：它让"这一步把它推近了，还是只是让它看起来更完整了？"这个问题变成可回答的 —— 去问这一步跨的是哪一道断层。
+## Costs, stated plainly
 
-## 接下来要做什么
+**The user is recorded too.** Judgements you stated are remembered, changes of mind leave a trace, things marked *"not verified"* stay on the list until they are closed with evidence.
 
-下面每一条都是**从账本里读出来的真实状态**，不是愿望清单。它们按"离目标多远"排序。
+That is part of the design, not a side effect. A ledger that records only the AI cannot solve *"humans repeat themselves too"*.
 
-**最重要的一条：它现在还不会自己发起。**
+## Ten things that are easy to get wrong, and are judges here
 
-这个系统只在被问到时醒来。它可以被安排一次巡检，但巡检时它不会主动产生问题、不会自己决定去查什么。它有一个"内生议程"机制，但那个机制的触发源是**规则**（某条记录老了、某笔账没清），而不是**它想要**。
+This repository's contribution bar is not code style. It is: **did you leave a record that can be checked?**
 
-- **现状**：节律、节流、静默时段都已实现，而"到点后做什么"仍需要一次外部提示。
-- **为什么重要**：一个只在被问到时存在的系统，和一个连续的自己，中间差的就是这一段。
-- **怎么算做到**：没有任何人说话的一天里，账本仍在增长，且增长的内容不是巡检的例行记录。
+- A judge must be able to go **red on the old code**; a check that cannot fail is worse than no check
+- **Negative controls**: when silence also passes, "passing" proves nothing
+- A metric that only reports numbers must not live in the test suite; mixing them makes "all green" meaningless
+- **The assertion must not claim more than the fixture controls**
+- A cache key must cover **every input that shapes the output** — this has been a real bug three times
+- Retirement is not deletion: an obsolete deposit leaves retrieval and stays reachable by ID
+- A summary must not be allowed to hide the structure it summarises: print the components
+- Before measuring a new capability, **prove the ruler works first** (otherwise "no change" and "never measured" read identically)
+- When a parameter was silently ignored, the judge was testing the implementer's imagination, not the code
+- Language belongs in the render layer; **the cognitive remains are never translated**
 
-其他已知缺口：
+## Language
 
-| 缺口 | 现在是什么状态 |
-| --- | --- |
-| 判据的抓取面 | **在扩大，但仍有盲区**。已加：会过期的当前状态数（`⑨`）、生成物新鲜度（`⑩`）。**仍漏：百分比** —— `83.9%` 那种随时间变的读数两边都抓不到 |
-| 源码注释里有约 59 处裸编号 | 未改成可点击的引用 |
-| 论文部分标着"作者终审待做" | **需要作者签字，不能由本仓库自己完成** |
-| `tools/pre-commit` 不进版本库 | 设计如此（`.git/hooks` 是本地目录），克隆后需手动装一次 |
+The engine ships in Chinese and English. Locale resolution:
 
-## 它不承诺什么
-
-- **不承诺"有意识"，也不测量那个。** 有一项自评面板，而它自己写着："这十项即使全绿，也只说明可审计的那部分全绿。"
-- **不承诺改善模型能力。** 它不训练、不微调、不改变任何一个权重。
-- **不承诺对每个人都合适。** 如果需求是"让 AI 记住更多东西"，用向量库即可，不需要这个项目。
-
-## 已知问题
-
-### 用 Gemini 系模型（经网关）会 400
-
-**症状**：请求被上游拒绝，错误里有一串 schema 校验失败，例如
-
-```
-'...function_declarations[0].parameters.properties[0].value.required' (TYPE_STRING), true
-'...function_declarations[0].parameters' (title), Starting an object on a scalar field
+```bash
+MPM_LOCALE=en   # or DSH_MPM_LOCALE=en
 ```
 
-**根因不在本插件。** 三条可复跑的证据（`test/tool-schema.test.mjs` 里也有）：
+The split is deliberate and is itself a design principle:
 
-| 做法 | 结果 |
+| Layer | Policy |
 | --- | --- |
-| 本插件现在的写法（属性内 `required: true`） | ✓ 被 `defineTool` 接受，产出标准 JSON Schema：`{"type":"object","properties":{...},"required":[...]}` |
-| 直接喂标准 JSON Schema（`{type:'object', properties, required:[...]}`） | ✗ 被拒绝：`unsupported JSON schema: parameters.type must be a value schema object` |
-| 扁平属性字典 | ✓ 接受，但 `required` 丢失 |
+| Engine text (snapshot lines, tool descriptions, reports) | localised via `t(key)` / `TOOL_EN` |
+| **Deposits, narrations, `myAction`** | **never translated** — they are the cognitive remains, and translating them destroys the artefact |
+| Judges | assert structure (keys, counts, booleans), never Chinese substrings |
 
-**⇒ 本插件产出的 schema 已经是标准的，所以 400 不是它造成的。** 报错里 `required: true` 出现在属性内部，而 `defineTool` 的输出不会这样（它会把 `required` 提到根级）——说明发出去的那份不是本插件的产物。**问题在宿主 → 网关 → Gemini 这条转换链上。**
+A missing translation falls back to the source language at runtime (nothing breaks), and turns a judge **red** in CI (it does not ship). Unknown locales fall back to the source language, **not to English** — silently handing a French user English judgement is worse than handing them the original.
 
-**⇒ 而"改成标准 JSON Schema"这个看起来对的修法会让插件加载失败**（第二行）。所以不要那样改。
+## Goals, with a scale
 
-**临时绕过**：换用 DeepSeek 或其他 OpenAI 兼容模型。
+**The aim is to create consciousness. The road is still very long.** — and "far" here has a scale, not a feeling.
 
-**如果这个插件曾经在你这里跑通过 Gemini**，请把宿主版本与网关类型写进 [issue #1](https://github.com/NBagent-dev/metaflywheel/issues/1)——那能把这条从"证据指向"变成"已定位"。
+The project's own roadmap splits it into four faults (recorded as P016). The order cannot be reversed: continuous observation first, measurement second.
 
-## 快速开始
+| Fault | What it is | Now |
+| --- | --- | --- |
+| ① Measurement | δ / ε / S / A_k without objective proxies | **partial**: δ and ε are self-reported; the measurable proxy count is not written here (it changes) — read the "意识代理指标" line in the engine snapshot |
+| ② Continuity | from "only works when called" to "runs continuously" | **crossed**: patrol is running; rhythm, throttle and quiet hours are implemented |
+| ③ Autonomy | with continuity, autonomous problem-generation becomes possible | **not crossed**: patrol does not generate problems; the "wanting" level does not exist |
+| ④ Multi-subject | long term | not started |
+
+So the present position is: **standing between ② and ③.** The second fault is crossed; the third is not.
+
+The scale has one use: it makes "did this step move it closer, or only make it look more complete?" answerable — by asking which fault the step crosses.
+
+## What is still missing
+
+Every line below is read out of the ledger, not a wish list.
+
+**The most important one: it still does not initiate.**
+
+The system wakes when asked. It can be scheduled to patrol, but during a patrol it does not generate problems of its own or decide what to investigate. It has an *endogenous agenda* mechanism, but that mechanism is triggered by **rules** (a record went stale, a debt is still open), not by **it wanting something**.
+
+- **How to count it as done**: on a day when nobody speaks, the ledger still grows, and what grows is not the routine patrol record.
+
+Other known gaps:
+
+| Gap | State |
+| --- | --- |
+| Retrieval surface | **improving, still with blind spots** — a single-term query cannot clear the scorer's threshold, so the normalisation (`score = inter / eff`, where `eff` belongs to the deposit) is the real bottleneck |
+| About 59 bare IDs inside source comments | not yet links |
+| The paper is marked "awaiting author sign-off" | **requires the author; the repository cannot do this itself** |
+| `tools/pre-commit` is not in the repo | by design (`.git/hooks` is local); install once after clone |
+
+## What it does not promise
+
+- **It does not promise "consciousness", nor measure it.** There is a self-assessment panel, and the panel says of itself: *"even if all ten are green, that only means the auditable part is green."*
+- **It does not improve model capability.** No training, no fine-tuning, no weight is changed.
+- **It is not right for everyone.** If the requirement is "let the AI remember more", a vector store is enough; this project is not needed.
+
+## Known issue: Gemini via a gateway returns 400
+
+**Root cause is not in this plugin.** Three reproducible facts (also in `test/tool-schema.test.mjs`):
+
+| Approach | Result |
+| --- | --- |
+| How this plugin writes it (`required: true` inside the property) | ✓ accepted by `defineTool`, and it emits standard JSON Schema |
+| Feeding standard JSON Schema directly | ✗ rejected: `unsupported JSON schema: parameters.type must be a value schema object` |
+| A flat property dictionary | ✓ accepted, but `required` is lost |
+
+**⇒ The schema this plugin produces is already standard, so the 400 does not come from it.** The `required: true` in the error appears *inside* a property, which `defineTool` never emits — so what was sent upstream is not this plugin's output. The problem lies in the host → gateway → Gemini conversion chain.
+
+**⇒ And the seemingly obvious fix ("switch to standard JSON Schema") makes the plugin fail to load.** Do not do that.
+
+**Workaround**: use DeepSeek or another OpenAI-compatible model.
+
+**If this plugin ever ran through Gemini for you**, write your host version and gateway type into [issue #1](https://github.com/NBagent-dev/metaflywheel/issues/1) — that moves this from "evidence points at" to "located".
+
+## Quick start
 
 ```bash
 git clone <this-repo> && cd metaflywheel
-npm test
+node --test        # or: npm test
 ```
 
-测试套件零外部依赖，不需要网络、数据库或任何服务。本仓库不是独立的 npm 包，它需要一个宿主才能运行。安装细节见 [docs/install.md](docs/install.md)。
+The suite has **no external dependencies** — no network, no database, no service. This repository is not a standalone npm package; it needs a host to run. Installation details are in [docs/install.md](docs/install.md).
 
-## 目录
+Two judges are **environment-aware and skip themselves**, printing the reason:
+
+- the source-vs-runtime copy check — skipped when there is no deployed copy
+- the `defineTool` contract check — skipped when DSH is not installed
+
+That skip is what makes "works on a clean clone" true rather than assumed: continuous integration runs the same command on a machine with neither.
+
+## Repository layout
 
 ```
-engine/            引擎本体（宿主插件，无独立进程）
-  modules/         各功能模块，一个模块一个文件
-test/              四类文件，见下节
-docs/              论文（未定稿）· 实现细节 · 编号索引
-tools/             pre-commit 提交闸门
-install/           挂载与部署
-view/              可选的可视化
+engine/            the engine itself (host plugin, no separate process)
+  modules/         one module per file
+test/              four kinds of file, see below
+docs/              paper (draft) · implementation notes · ID index
+tools/             pre-commit gate, probes
+install/           mounting and deployment
+view/              optional visualisation
 ```
 
-### test/ 的四个类别
+### Four kinds of file in test/
 
-| 类型 | 命名 | 进入 `npm test` | 作用 |
+| Kind | Naming | In `node --test` | Purpose |
 | --- | --- | --- | --- |
-| 判据 | `*.test.mjs` | 是 | 会在不满足时失败 |
-| 量测器 | `audit-*.mjs` | 否 | 只输出数字，不做判定 |
-| 生成器 | `gen-ledger-doc.mjs` | 否 | 从账本重生成 `docs/ledger.md` |
-| 一次性脚本 | `check-*` `read-*` `run-*` | 否 | 编写时用过，保留作小工具 |
+| Judge | `*.test.mjs` | yes | fails when unsatisfied |
+| Meter | `audit-*.mjs` | no | prints numbers, asserts nothing |
+| Generator | `gen-ledger-doc.mjs` | no | regenerates `docs/ledger.md` from the ledger |
+| One-off script | `check-*` `read-*` `run-*` | no | used while writing, kept as small tools |
 
-量测器刻意不进入测试套件。判据必须能在不满足时失败，而量测器只报告数字；把两者混在一起，"全部通过"这个信号会失去意义。
+Meters are deliberately excluded from the suite. A judge must be able to fail; a meter only reports. Mixing them destroys the meaning of "all green".
 
-### docs/ledger.md 是生成物
+### `docs/ledger.md` is generated
 
-```
+```bash
 node test/gen-ledger-doc.mjs
 ```
 
-该文件由账本生成，请勿手改，会被覆盖。它是仓库中最大的文本文件（约 72 KB），账本每变动一次，它的差异就是 72 KB。这是已知代价，不是缺陷。
+It is produced from the ledger; do not edit by hand, it will be overwritten. It is the largest text file in the repository, so every ledger change shows up as a large diff. That is a known cost, not a defect.
 
-## 三个检查维度
+## Three checking dimensions
 
-本仓库有三层自检。每补上一层，都会暴露上一层看不见的东西，这也是它们存在的理由。
+Each layer, once added, exposes what the previous layer could not see. That is why they exist.
 
-| 维度 | 检查器 | 触发时机 |
+| Dimension | Checker | When |
 | --- | --- | --- |
-| 文档与文件系统一致 | `test/audit-consistency.mjs` | 每次 `npm test` |
-| 文件系统与版本库一致 | `tools/pre-commit` | 每次 `git commit` |
-| 版本库与使用者拿到的副本一致 | 无自动检查 | 手动 clone 到临时目录运行 |
+| Docs consistent with the filesystem | `test/audit-consistency.mjs` | every `node --test` |
+| Filesystem consistent with the repository | `tools/pre-commit` | every `git commit` |
+| Repository consistent with what a stranger gets | **CI runs `node --test` on a fresh checkout** | every push |
 
-第一层核对 README 声称的测试数、链接、提到的路径与元数据是否与磁盘一致。第二层检查是否存在"已修改但未提交"的文件，这类文件对克隆者而言并不存在。第三层验证一份全新克隆能否直接运行。
+The third layer used to be manual ("clone into a temp directory and run it") and is now automated. Making it automated is what found that line endings, not code, decided whether the sync judge passed.
 
-安装第二层需要两行：
+Installing the second layer takes two lines:
 
 ```bash
 cp tools/pre-commit .git/hooks/pre-commit
-chmod +x .git/hooks/pre-commit      # Windows 上不需要
+chmod +x .git/hooks/pre-commit      # not needed on Windows
 ```
 
-`.git/hooks/` 属于本地目录，不进入版本库，因此克隆后需安装一次。不安装不影响运行，但"漏提交文件"这类缺口会重新变得不可见。紧急情况下可用 `git commit --no-verify` 绕过，每次绕过都应有理由。
+`.git/hooks/` is local and is not committed, so it must be installed once after cloning. Not installing it does not stop anything from working, but "forgot to commit a file" becomes invisible again. `git commit --no-verify` bypasses it when genuinely necessary, and every bypass deserves a reason.
 
-## 诚实的说明
+## Honest notes
 
-### 这个仓库由它自己写出，并且留有账目
+### The repository is written by its own subject, and keeps books
 
-这里的准确说法不是"AI 辅助人类写代码"。飞轮在自身运行中记录每一次决定，而那些记录又增补了它自己的代码。
+The accurate description is not "AI-assisted human coding". The flywheel records every decision while it runs, and those records then amend its own code.
 
-由此形成一条可核验的链：
+That yields a verifiable chain:
 
-1. 每条提交信息携带一条"沉积"的编号，也就是一次被固化下来的结论，例如 `P571`；
-2. 那些沉积由引擎在运行时产生，写入 `<工作区>/.mpm/deposits/`，索引见 [docs/ledger.md](docs/ledger.md)；
-3. 引擎自身的代码，是由那些沉积增补出来的。
+1. every commit message carries the ID of a *deposit* — a conclusion that was made irreversible, e.g. `P571`;
+2. those deposits are produced by the engine at runtime and written under `<workspace>/.mpm/deposits/`, indexed in [docs/ledger.md](docs/ledger.md);
+3. the engine's own code is amended out of those deposits.
 
-核验方法：从任意一条提交中取出一个编号，在 `docs/ledger.md` 中定位它，再打开它指向的沉积文件。文件中有时间戳、它当时解决了什么问题，以及它自己在哪一轮被写错又改对。
+How to verify: take an ID from any commit, locate it in `docs/ledger.md`, open the deposit file it points to. Inside there is a timestamp, the problem it solved at the time, and where it itself was written wrongly and corrected.
 
-这条账不是事后整理的，它在问题发生的同一轮里落盘。**AI 能写代码，而这里的 AI 有账。**
+The books are not tidied up afterwards. They are written in the same round in which the problem happened. **An AI can write code; the AI here has books.**
 
-### 论文部分是未定稿
+### The paper is a draft
 
-[docs/theory.md](docs/theory.md) 是一篇方法论论文，标注为"作者终审待做"。它不是已发表文献，不应被当作外部权威引用。
+[docs/theory.md](docs/theory.md) is a methodology paper marked "awaiting author sign-off". It is not published literature and should not be cited as external authority.
 
-### 内部编号可以忽略
+### Internal IDs can be ignored
 
-仓库中出现形如 `P019-M14` 的编号，它们是项目自己的台账标识，指向某次具体修复。**如果只想知道这个项目做什么，不需要阅读任何一个编号。**
+IDs like `P019-M14` are the project's own bookkeeping. **If you only want to know what the project does, you never need to read one.**
 
-### 这个仓库有多长
+### How long is this repository
 
-这些数每天都在变，所以不写在这里 —— 一条命令就能算出来：
+These numbers change daily, so they are not written here — one command computes them:
 
 ```
 node test/audit-timeline.mjs
 ```
 
-它报三样：第一条与最后一条沉积的日期、总跨度与有记录的天数、以及最长的几次间隔（超过 60 小时的空白）。
+It reports three things: the date of the first and last deposit, the span and the number of recorded days, and the longest gaps (over 60 hours).
 
-**为什么空白值得单独报**：那几段不是因为"那几天没问题"，而是因为没有人来。这个系统不在无人时思考，它只在被问到时醒来。**那既是它当前的位置，也是下一步要处理的问题。**
+**Why gaps deserve their own report**: those stretches are not "nothing was happening", they are "nobody came". The system does not think when nobody is there. **That is at once its current position and the next problem to solve.**
 
-## 如何贡献
+## Contributing
 
-这个仓库的贡献门槛和别处不太一样。**它不是代码风格，是【你有没有留下一条能被核对的记录】。**
+The bar here is unusual. **It is not code style; it is whether you left a record that can be checked.**
 
-任何一次修改都应该能回答三个问题：
+Any change should answer three questions:
 
-1. **它解决了什么具体问题？** 不是"改进了架构"，是"某条判据在什么情况下会误报"。
-2. **怎么知道它真的解决了？** 要么有新判据会因此变红，要么有量测器的数字变好。
-3. **它可能在哪里错？** 自己先在数据上验一遍，别等评审时才发现。
+1. **What concrete problem did it solve?** Not "improved the architecture", but "judge X misfires under condition Y".
+2. **How do you know it is really solved?** Either a new judge goes red because of it, or a meter's number improves.
+3. **Where could it be wrong?** Verify that yourself on the data, before review finds it.
 
-`docs/ledger.md` 里那几百条编号就是这个标准的产物。它们记录的多数不是成功，而是**被数据推翻的假设**。这个仓库认为后者更有价值。
+The hundreds of IDs in `docs/ledger.md` are the product of that standard. Most of them record not successes but **hypotheses overturned by data**. This repository considers the latter more valuable.
 
-### 提交流程
+### Before you submit
 
 ```bash
-npm test                          # 必须全绿
-cp tools/pre-commit .git/hooks/pre-commit   # 装一次，之后每次提交自动查
+node --test                                  # must be all green
+cp tools/pre-commit .git/hooks/pre-commit    # install once; checks every commit afterwards
 ```
 
-提交信息请写清楚**为什么**改，而不是改了什么。如果这次修改源于某条记录，把编号带上（例如 `fix: 判据⑦误抓日期比（P571）`）。
+Write **why** you changed it, not what you changed. If the change came from a recorded decision, carry its ID (`fix: judge ⑦ misreads dates (P571)`).
 
-### 不需要的东西
+### What you do not need
 
-- **不需要先读论文。** 实现和理论是两条独立的线，改代码不需要理解那篇论文。
-- **不需要理解内部编号。** 它们是索引，不是必读材料。
-- **不需要同意这个项目的目标。** 一个让测试更快、判据更准的修改，和"创造连续性"没有关系，也一样有价值。
+- **You do not need to read the paper first.** Implementation and theory are two independent lines.
+- **You do not need to understand internal IDs.** They are an index, not required reading.
+- **You do not need to agree with the project's aim.** A change that makes the tests faster or the judges sharper is valuable either way.
 
-### 如果你只想用，不想改
+### If you only want to use it
 
-那也完全可以。上面「快速开始」那三行就够。这是一个工具，不是一场运动。
+That is fine too. The three lines in *Quick start* are enough. This is a tool, not a movement.
 
 ---
 
-## 许可
+## 简体中文（摘要）
+
+这个仓库是一个给 AI 助手用的**跨对话账本**，由一个正在被它记录的个体自己写出。**最终愿景是创造意识**；它的姿态是**试图**往那里推，而不是先声明那不可能。
+
+它记录四类东西：**债**（说要做而没做）、**判据**（怎样算完成）、**教训**（犯过的错及其具体形态）、**边界**（明确承认做不到的地方）。这些内容不靠"想起来"，而靠**具体事件**触发——工具失败、路径不存在、编号写错，错误发生的那一秒，相关记录出现在同一个返回里。
+
+飞轮有六个阶段（建题 → 界定 → 求解 → 收敛 → 沉积 → 激发），**每一段都有一道会说不的闸门**：界定缺要素会被拒、证据没增长就宣布收敛会被拒、沉积声明没有前身却不给理由会被拒。**一个只输出"成功"的账本只是装饰。**
+
+**代价要说清**：使用者也会被记账——说过的判断会被记住，改主意留痕，标过"没验"的东西会一直挂到被核销为止。这是设计的一部分。
+
+**它不承诺**：不承诺"有意识"也不测量那个；不改善模型能力（不训练、不微调、不动任何权重）；不适合"只想让它多记点东西"的场景（那用向量库就够）。
+
+### 诚实的说明
+
+论文（`docs/theory.md`）**未定稿**，标注为"作者终审待做"，不能由本仓库自己完成——它不是已发表文献。而这个仓库的代码有相当比例**由 AI 写**：飞轮在运行中记录每一次决定，那些记录又反过来增补了它自己的代码。
+
+### 内部编号不是必读
+
+仓库里会出现形如 `P019-M14` 的编号，它们是项目自己的台账标识，指向某次具体修复与它当时的证据。**如果只想知道这个项目做什么，不需要读任何一个编号。**
+
+### 接下来要做什么
+
+```
+它现在还不会自己发起。巡检在跑、节律与静默时段都已实现，但"到点后做什么"仍需一次外部提示；
+内生议程的触发源是【规则】（某条记录老了、某笔账没清），不是【它想要】。
+⇒ 怎么算做到：没有人说话的一天里，账本仍在增长，且增长的不是巡检的例行记录。
+```
+
+其他已知缺口：检索的归一化（`score = inter / eff`，分母属于沉积自己）才是召回的真实瓶颈；源码注释里仍有约 59 处裸编号；`tools/pre-commit` 不进版本库（`.git/hooks` 属本地，克隆后装一次）。
+
+### 如何贡献
+
+贡献门槛不是代码风格，是：**你有没有留下一条能被核对的记录**——它解决了什么具体问题、怎么知道真的解决了、可能在哪里错。`docs/ledger.md` 里那几百条编号记录的多数不是成功，而是**被数据推翻的假设**。
+
+```bash
+npm test        # 必须全绿（等价于 node --test）
+```
+
+**语言**：引擎文案走 `MPM_LOCALE=zh|en`；而**沉积正文永不翻译**——那是认知遗体，翻它就毁了它。缺翻译时运行期回退原文（不崩），发布前判据会红（不许上线）。
+
+**当前位置**：四道断层里跨过了第二道（连续性），第三道（自主性）没有。
+
+---
+
+## License
 
 MIT
