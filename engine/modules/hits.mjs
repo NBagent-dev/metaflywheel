@@ -251,12 +251,21 @@ export function hitsLine(state, limit) {
   const open = openHits(all);
   const n = (typeof limit === 'number' && limit > 0) ? limit : 3;
   const stillN = all.filter(function (e) { return e && e.disposedAt && e.stillOpen === true; }).length;
+  // ★P601：方向条目**必须可见**（藏起来比误报更糟）——单列一段，明说它不参与欠账。
+  //   注意顺序：这里必须在下面 return 之前声明（曾因 TDZ 让整行渲染崩掉过一次）。
+  const dirs = directionHits(all);
+  const dirTxt = dirs.length
+    ? ' · **方向 ' + dirs.length + ' 条（不参与欠账，仍可按 ID 查到）**：' + dirs.slice(-3).map(function (e) {
+      return '「' + String(e.text || e.key).slice(0, 26) + '」(' + e.key + ')';
+    }).join(' · ')
+    : '';
   const recent = all.slice(-n).map(function (e) {
     const mark = !e.disposedAt ? '**未处置**' : (e.stillOpen === true ? '**处置了但仍未解决**' : '已处置');
     return '「' + String(e.text || e.key).slice(0, 30) + '」(' + e.key + '·' + e.verdict + '·' + mark + ')';
   });
   return '- 命中回流(P519·**源→行为→记录→源**)：命中 ' + all.length + ' 次 · **未处置 ' + open.length + ' 次**'
     + (stillN ? ' · **处置了但仍未解决 ' + stillN + ' 次**' : '')
+    + dirTxt
     + (recent.length ? '：' + recent.join(' · ') : '')
     + (open.length
       ? '——**未处置是我欠的账**：命中了却没说清怎么处置，等于没被约束过（用 `mpm_hit action=dispose` 留痕）。'
