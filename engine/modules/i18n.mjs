@@ -165,6 +165,120 @@ export const TOOL_EN = {
 };
 
 /**
+ * ★P607 参数描述的英文表（82 个参数，**按工具显式列全，不做共享词汇**）。
+ *
+ * ★为什么不按参数名共享：`action` 在 rhythm 里是 show/set/reset，在 unknown 里是
+ *   add/resolve/list，在 hit 里是 list/dispose —— 同一个名字，三种语义。
+ *   共享词汇会让"看起来都翻了"变成"翻错了一半"。
+ * ★缺条目 ⇒ 运行时回退中文（不崩），但 test/tool-i18n.test.mjs 会红（不许发布）。
+ */
+export const TOOL_PARAM_EN = {
+  // mpm_rhythm
+  'mpm_rhythm.action': 'show (default) | set | reset',
+  'mpm_rhythm.staleMinutes': 'How many minutes count as stale (5-1440).',
+  'mpm_rhythm.fireThrottleMinutes': 'Minimum gap between two self-initiated fires (5-720 minutes).',
+  'mpm_rhythm.quietFrom': 'Quiet hours start (0-23); same as quietTo or omitted means no quiet window.',
+  'mpm_rhythm.quietTo': 'Quiet hours end (0-23; may cross midnight, e.g. 23 to 7).',
+  'mpm_rhythm.valenceFloor': 'Valence floor (0-100): do not self-initiate below it. Omit = unchanged, null = disabled.',
+  'mpm_rhythm.note': 'Why the change (recorded in history and reports).',
+  // mpm_principal
+  'mpm_principal.text': "His own words (or a reliable summary) - not my interpretation.",
+  'mpm_principal.key': 'The thing it constrains, e.g. "project positioning" / "model boundary" / "delivery bar".',
+  'mpm_principal.mode': 'Optional: essence | boundary | direction | meaning | veto. Omit = auto-detect; if unsure, do not force a category.',
+  'mpm_principal.note': 'Required: on what occasion he said it, and what I understand it to constrain.',
+  // mpm_unknown
+  'mpm_unknown.action': 'add | resolve (needs evidence) | list',
+  'mpm_unknown.text': 'What I do not know, phrased so it can be tested.',
+  'mpm_unknown.key': 'What it attaches to (problem ID / repo / topic); it resurfaces before related work starts.',
+  'mpm_unknown.until': 'Required: the condition under which this no longer counts as unverified.',
+  'mpm_unknown.why': 'Optional: why it was not verified at the time.',
+  'mpm_unknown.source': 'Optional: where it came from (which round / which criterion / which conversation).',
+  'mpm_unknown.evidence': 'Required for resolve: what evidence means it is no longer unverified.',
+  // mpm_hit
+  'mpm_hit.action': 'list (default) | dispose (needs myAction)',
+  'mpm_hit.key': 'dispose: settle the newest hit whose constrained object matches this key.',
+  'mpm_hit.id': 'dispose: settle exactly this hit id (takes precedence over key).',
+  'mpm_hit.myAction': 'Required for dispose: how I handled it, stated so the next observation can check it.',
+  'mpm_hit.stillOpen': 'I handled it, but the matter is still unresolved - keeps it counted as an open debt.',
+  'mpm_hit.stillOpenDays': 'Re-check window in days when stillOpen is true (default 14). After it expires the row stops counting as debt but is still recorded.',
+  'mpm_hit.redo': 'Allow re-disposing an already disposed row (explicit confirmation / new wording / new deadline). Default false.',
+  'mpm_hit.direction': 'This row is a direction, not a task: it never counts as debt, but stays visible.',
+  // mpm_adopt
+  'mpm_adopt.action': 'add (record one adoption) | list (loop rate and recent adoptions)',
+  'mpm_adopt.sedimentId': 'Required for add: which sediment I adopted (e.g. P521-M438).',
+  'mpm_adopt.forWhat': 'Required for add: which decision or output it was used for.',
+  'mpm_adopt.withoutIt': 'Required for add: what I would have done WITHOUT it. No counterfactual, no adoption.',
+  // mpm_generate
+  'mpm_generate.title': 'Short title of the problem.',
+  'mpm_generate.observation': 'What anomaly or gap was observed, and why it is a problem.',
+  // mpm_frame
+  'mpm_frame.problemId': 'Problem id, e.g. P001.',
+  'mpm_frame.statement': 'Structured problem statement covering all five elements: initial state / goal / constraints / operators / success criteria.',
+  'mpm_frame.delta': 'Framing precision delta (0-1, lower is better): self-assessed over the five elements, about +0.2 per missing element.',
+  'mpm_frame.reasoning': 'Why this framing or re-framing; stronger when it is a re-entry.',
+  // mpm_solve
+  'mpm_solve.problemId': 'Problem id.',
+  'mpm_solve.action': 'This solve path / action / finding.',
+  'mpm_solve.epsilon': 'Distance to the goal epsilon (0-1, lower is better); needs evidence.',
+  'mpm_solve.parked': 'Park the problem: it leaves staleness, stall and agenda triggers until re-awakened.',
+  'mpm_solve.awakenWhen': 'Re-awaken condition (recommended when parking).',
+  'mpm_solve.openEnded': 'Mark as non-converging: permanently-open | dimensional-reduction | negotiated-compromise. none clears it.',
+  // mpm_converge
+  'mpm_converge.problemId': 'Problem id.',
+  'mpm_converge.delta': 'Current framing precision delta (0-1).',
+  'mpm_converge.epsilon': 'Current distance to the goal epsilon (0-1).',
+  'mpm_converge.robustness': 'Whether the robustness check passed: "pass" or "fail".',
+  'mpm_converge.notes': 'Evidence and what was actually tested.',
+  // mpm_enrich
+  'mpm_enrich.action': 'add (default) | show',
+  'mpm_enrich.id': 'Sediment id for add, e.g. P028-M18.',
+  'mpm_enrich.keywords': 'Optional: keywords, comma or space separated.',
+  'mpm_enrich.aliases': 'Optional: aliases / synonymous phrasings, comma or space separated.',
+  'mpm_enrich.reason': 'Optional: why these words were added (kept as a trace).',
+  // mpm_supersede
+  'mpm_supersede.sedimentId': 'The sediment whose status changes, e.g. P572-M473.',
+  'mpm_supersede.status': 'superseded | refuted | active. Only these three values.',
+  'mpm_supersede.bySedimentId': 'The sediment that replaces it (recommended for superseded; must already exist).',
+  'mpm_supersede.reason': 'Required: why. A status change with no reason is a status change with no account.',
+  // mpm_weights
+  'mpm_weights.action': 'show (default) | set | reset',
+  'mpm_weights.weights': 'JSON when setting, e.g. {"hit-open":{"base":40,"per":1}}. Omitted fields keep their values; illegal values fall back and are reported.',
+  // mpm_rank_eval
+  'mpm_rank_eval.weights': 'Optional JSON, e.g. {"relevance":1,"recency":0.3,"importance":0.2}; defaults are used when omitted.',
+  // mpm_index
+  'mpm_index.action': 'report (default, computes only) | write | verify (rebuild and compare bytes on disk).',
+  // mpm_micro
+  'mpm_micro.title': 'Short title for the small problem.',
+  'mpm_micro.statement': 'One sentence covering the five elements: initial / goal / constraints / operators / criterion.',
+  'mpm_micro.action': 'What was actually done, or the conclusion reached.',
+  'mpm_micro.delta': 'Framing precision delta (0-1).',
+  'mpm_micro.epsilon': 'Distance to the goal epsilon (0-1).',
+  'mpm_micro.robustness': 'Whether the robustness check passed: "pass" or "fail".',
+  'mpm_micro.depositTitle': 'Optional: title, if there is reuse value.',
+  'mpm_micro.depositBody': 'Optional: deposit body. Omit to record deposit:none plus the reason.',
+  // mpm_deposit
+  'mpm_deposit.problemId': 'Problem id.',
+  'mpm_deposit.title': 'Title of the deposit.',
+  'mpm_deposit.body': 'Reusable conclusions / causal structure / operational steps.',
+  'mpm_deposit.tags': 'Retrieval tags as a JSON array string, e.g. ["tag1","tag2"].',
+  'mpm_deposit.links': 'JSON array string of the sediments this one grew out of, e.g. ["P482-M400"]. If there is genuinely no ancestor, pass "none" and give linkReason.',
+  'mpm_deposit.linkReason': 'Required when links is "none": why this sediment has no ancestor.',
+  // mpm_evoke
+  'mpm_evoke.sedimentId': 'Sediment id, e.g. P001-M1.',
+  'mpm_evoke.friction': 'The cognitive friction: what the old solution no longer covers.',
+  'mpm_evoke.newTitle': 'New problem title (derived from the sediment by default).',
+  'mpm_evoke.type': 'Evocation type: drift | mutation | perspective | injection.',
+  // mpm_setroot
+  'mpm_setroot.path': 'The new sediment root (should be an absolute path inside the session workspace).',
+  // mpm_grant
+  'mpm_grant.action': 'grant | revoke | status',
+  // mpm_flywheel_state
+  'mpm_flywheel_state.dummy': 'Placeholder parameter (no effect).',
+  // mpm_narrate
+  'mpm_narrate.text': 'First-person narration body (up to 400 characters); write the tone, not the data.'
+};
+
+/**
  * 把工具 description 换成本地语言。zh ⇒ 原样返回（**一个字节都不动**）。
  * 缺英文条目 ⇒ 回退中文（不崩），但 test/i18n.test.mjs 会红 ⇒ 不许发布。
  */
@@ -174,9 +288,21 @@ export function localizeTools(tools, locale) {
   if (L === DEFAULT_LOCALE) return tools;
   return tools.map(function (t) {
     if (!t || typeof t !== 'object') return t;
+    const out = Object.assign({}, t);
     const en = TOOL_EN[t.name];
-    if (typeof en !== 'string') return t;
-    return Object.assign({}, t, { description: en });
+    if (typeof en === 'string') out.description = en;
+    // ★P607：参数描述也要换 —— 参数名不是可翻译的自由文本，但它的 description 是。
+    if (t.parameters && typeof t.parameters === 'object') {
+      const ps = {};
+      for (const k of Object.keys(t.parameters)) {
+        const p = t.parameters[k];
+        if (!p || typeof p !== 'object') { ps[k] = p; continue; }
+        const pen = TOOL_PARAM_EN[t.name + '.' + k];
+        ps[k] = (typeof pen === 'string') ? Object.assign({}, p, { description: pen }) : p;
+      }
+      out.parameters = ps;
+    }
+    return out;
   });
 }
 
