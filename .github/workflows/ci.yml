@@ -30,3 +30,8 @@ jobs:
 
       - name: Smoke tests
         run: node --test test/smoke.test.mjs
+
+      # ★P620：原来 CI 只跑 smoke，于是 350+ 条判据从没在 CI 上跑过。
+      #   一个"只有本地绿"的判据体系，对发布不构成约束。
+      - name: Full suite
+        run: node --test

@@ -107,7 +107,8 @@ async function readStateDataImpl(e, r) {
  * 语义：这类量只增不减（计数与时间戳）⇒ max 既安全又正确；agentId 只在为空时补（不盖掉本轮的）。
  * 同族：P502「累加器可以被擦」——修法同样是"取 max / 从事实重算"，而不是信任存储值。
  */
-import { mergePrincipalLists } from "./principal.mjs";   // ★P517（**第 4 次"用了没引入"**：靠冷启动集成判据抓到，不是静态判据）
+import { t } from "./i18n.mjs";                 // ★P620：渲染面一律走词条（数据层不动）
+  import { mergePrincipalLists } from "./principal.mjs";   // ★P517（**第 4 次"用了没引入"**：靠冷启动集成判据抓到，不是静态判据）
 import { mergeUnknowns } from "./unknowns.mjs";          // ★P517③：未核清单（记忆的另一半：我不知道的东西）
 import { mergeHits } from "./hits.mjs";                  // ★P519：回流（命中的处置必须留痕）
 import { mergeAdopts } from "./adopt.mjs";               // ★P526：采用（动手前检索并真的采用）
@@ -255,7 +256,7 @@ async function restoreImpl(e) {
         if (judgedNone || (fullyConverged && quiet)) bp.settled = { at: Date.now(), via: judgedNone ? 'migrate-judged' : 'migrate-converged' };
       }
     }
-    e.diag.lastRestore = '已加载最新状态 ' + e.root.current + ' (freshness ' + best.fr + '，扫描 ' + cands.length + ' 个候选根)';
+    e.diag.lastRestore = t('state.restore', { root: e.root.current, fr: best.fr, n: cands.length });
     console.log('[mpm][engine] ' + e.diag.lastRestore);
     await remapForeignSedimentsImpl(e);
     // P487④：启动对账（孤儿 .md / 幽灵索引项）——只报不改，结论进 measure
@@ -308,9 +309,9 @@ const EVENTS_MAX = 500;
 
 /** 落盘结论的统一文案（P487①：任何工具报告都必须带上它，不许无条件断言"已落盘"）。 */
 export function persistNote(pr) {
-  if (!pr) return '\n（本轮未发生落盘）';
-  if (pr.ok) return '\n（账本已落盘 · ' + (pr.mode || '?') + (pr.backup ? ' · ' + pr.backup : '') + '）';
-  return '\n⚠ **账本未落盘**：' + (pr.reason || '未知原因') + '（改动只在内存里，重启即失——不要当作已记账）';
+  if (!pr) return t('state.persist.none');
+  if (pr.ok) return t('state.persist.ok', { mode: pr.mode || '?', backup: pr.backup ? ' · ' + pr.backup : '' });
+  return t('state.persist.fail', { why: pr.reason || t('state.reason.unknown') });
 }
 
 /** LF 归一化：服务的 after 是 LF 归一化文本，比较前把两侧拉齐（Windows 的 \r\n 只可能来自我方）。 */
@@ -356,17 +357,17 @@ async function persistImpl(e) {
     // ② 回读等价：服务把写后内容带了回来（null = 服务没提供，不是失败）
     const verify = (out && typeof out.after === 'string') ? (lf(out.after) === lf(json)) : null;
     if (verify === false) {
-      return { ok: false, mode: 'failed', reason: '回读内容与写出内容不一致（服务返回的 after ≠ 本次 json）', bytes: json.length };
+      return { ok: false, mode: 'failed', reason: t('state.persist.mismatch'), bytes: json.length };
     }
     // ③ 备份上一版：用 out.before，单槽位固定名（服务无删除 API ⇒ 天然有界）
-    let backup = '未提供写前内容';
-    if (out && out.operation === 'create') backup = '首写，无上一版';
+    let backup = t('state.backup.none');
+    if (out && out.operation === 'create') backup = t('state.backup.first');
     else if (out && typeof out.before === 'string' && out.before.length) {
       try {
         const bt = await e.fsSvc.resolve(stateFile(e.root.current) + BACKUP_SUFFIX);
         await e.fsSvc.writeText(bt, out.before);
-        backup = '上一版 ' + out.before.length + ' 字符 → flywheel.json' + BACKUP_SUFFIX;
-      } catch (e2) { backup = '备份失败：' + (e2 && e2.message ? e2.message : String(e2)); }
+        backup = t('state.backup.prev', { n: out.before.length, suffix: BACKUP_SUFFIX });
+      } catch (e2) { backup = t('state.backup.fail', { why: (e2 && e2.message ? e2.message : String(e2)) }); }
     }
     // ★P594③：增量日志（**旁路**）。三条硬约束：
     //   ① 它失败**绝不影响落盘**（不 return、不改 ok）——日志是审计，不是前置条件；
@@ -409,10 +410,10 @@ async function persistImpl(e) {
 export async function reconcileDeposits(e) {
   const out = { at: Date.now(), mode: 'skipped', orphans: [], ghosts: [] };
   try {
-    if (!e.fsSvc || !e.root.current) { out.mode = 'skipped(无 fsSvc 或沉积根未定)'; }
+    if (!e.fsSvc || !e.root.current) { out.mode = t('state.reconcile.nofs'); }
     else {
       // P488：对账走服务契约的 listDir（**不再用 node:fs 猜路径**——resolve 返回的是 FsTarget 对象）
-      if (typeof e.fsSvc.listDir !== 'function') { out.mode = 'skipped(服务无 listDir)'; }
+      if (typeof e.fsSvc.listDir !== 'function') { out.mode = t('state.reconcile.nolist'); }
       else {
         const dir = await e.fsSvc.resolve(norm(e.root.current) + '/.mpm/deposits');
         const entries = await e.fsSvc.listDir(dir);
