@@ -37,7 +37,7 @@ test('③ 必须承认理论未定稿 + 代码由 AI 写（两种语言都要能
 
 test('④ 愿景必须写明，且位置性的边界必须紧跟其后', () => {
   assert.ok(/consciousness/i.test(EN), '★ 英文部分必须写出愿景');
-  assert.ok(/very long (?:way|road)|road is still|long way off|far from/i.test(EN), '★ 边界必须跟在愿景后面');
+  assert.ok(/very long|road is still|long way off|far from/i.test(EN), '★ 边界必须跟在愿景后面');
 });
 
 test('⑤ 必须是"试图"的姿态：the aim is / tries to 这类，而不是先认输', () => {
@@ -46,11 +46,11 @@ test('⑤ 必须是"试图"的姿态：the aim is / tries to 这类，而不是�
 
 test('⑥ 必须说明内部编号，并说明看它不是必需', () => {
   assert.ok(/P\d{2,3}-M\d{2,4}/.test(EN), '★ 英文部分必须至少举一个编号');
-  assert.ok(/never need to read|do not need to (?:read|understand)/i.test(EN), '★ 必须说清"不需要读编号"');
+  assert.ok(/never need to read|do not need to (?:read|understand)|never has to be read|no need to read/i.test(EN), '★ 必须说清"不需要读编号"');
 });
 
 test('⑦ 标准仓库该有的节：路线图 + 贡献指南 + 真能跑的命令', () => {
-  assert.ok(/What is still missing|What.s next|Roadmap/i.test(EN), '★ 英文部分必须有路线图一节');
+  assert.ok(/What is still missing|What.s next|Roadmap|Open gaps|Current position/i.test(EN), '★ 英文部分必须有路线图一节');
   assert.ok(/Contributing/i.test(EN), '★ 英文部分必须有贡献指南');
   assert.ok(/npm test|node --test/.test(EN), '★ 必须给出真的能跑的命令');
 });

@@ -2,161 +2,166 @@
 
 **English** · [简体中文](README.zh-CN.md)
 
-**A cross-session ledger for an AI assistant: it remembers what you had to correct, and hands it back at the moment the same mistake is about to happen again.**
+A cross-session ledger for an AI assistant. It stores the corrections a user made, the mistakes the assistant actually made, and the conditions under which a task counts as finished, and it returns the relevant record at the moment it is needed.
 
-**The long-term aim is to create consciousness. The road is still very long** — so this repository works on the part that can be attempted without lying: a continuous record, kept by the subject itself, that is allowed to overrule its own code.
+**The long-term aim is to create consciousness. The road is very long**, so this repository works only on the part that can be attempted without self-deception: a continuous record maintained by the subject itself, allowed to overrule its own code.
 
-This repository is written by its own subject. The ledger records every decision while it runs, and those records then amend the engine.
+The repository is written by its own subject. The ledger records each decision during execution, and those records are then used to amend the engine.
 
 ---
 
 ## A concrete example
 
-You correct it once: *"before you edit a file, read it."*
+A user corrects the assistant once: *read a file before editing it*.
 
-Three weeks later it tries to edit a file it has not read. It gets refused — and in the **same return**, next to the refusal, is the thing you said three weeks ago, with the ID it was filed under, and the two other times it made the same mistake.
+Three weeks later the assistant attempts to edit a file it has not read. The attempt is refused, and in the same tool return, next to the refusal, the ledger supplies the original correction with the ID it was filed under, together with the two earlier occasions of the same mistake.
 
-That is the whole idea, and it is deliberately narrow: **not "the AI remembers more", but "the correction arrives at the second it is needed"** — because a memory you have to remember to consult is not a memory that stops you.
+The scope is deliberately narrow. The objective is not to make the assistant remember more; it is to make a stored correction arrive at the moment it applies. A record that only surfaces when someone remembers to look it up cannot prevent the mistake it describes.
 
-## What it is not
+## Scope and non-goals
 
-- **It does not promise consciousness, and it does not measure it.** It has a self-assessment panel; the panel says of itself that all-green only means the auditable part is green.
-- **It does not make the model smarter.** No training, no fine-tuning, no weight is touched.
-- **It is not a memory store.** A store answers *"can this be kept?"*. This answers *"does it reach the assistant in the right second?"* — and a store with a hundred thousand records is the wrong instrument for *"stop repeating this mistake"*.
-- **It is not for everyone.** If the need is "let the AI remember more", a vector store is enough.
+| The repository does | The repository does not |
+| --- | --- |
+| store corrections, mistakes, open debts and explicit boundaries | claim or measure consciousness |
+| return them on concrete events (a failing tool, a missing path, a malformed ID) | change model weights, train, or fine-tune |
+| expose every decision in a ledger that can be read and audited | replace general-purpose memory or retrieval systems |
 
-## Try it
+A memory store answers whether something can be kept. This project addresses whether it arrives at the right moment, which is a different problem and needs a different instrument. If the requirement is simply that the assistant remembers more, a vector store is sufficient and this project is not needed.
+
+The engine includes a self-assessment panel for a set of measurable indicators; the panel itself states that an all-green result means only that the auditable part is auditable.
+
+## Getting started
 
 ```bash
 git clone <this-repo> && cd metaflywheel
 node --test        # or: npm test
 ```
 
-No network, no database, no service. The suite runs on a clean clone.
+The test suite has no network, database or service dependency and runs on a clean clone.
 
-This is a plugin, not an application: it needs a host to run in. Mounting instructions are in [docs/install.md](docs/install.md).
+This is a plugin, not a standalone application: it requires a host to run in. Mounting and deployment are described in [docs/install.md](docs/install.md).
 
 ## How it works
 
-The ledger attaches to one line of a [DSH](https://github.com/deepseek-ai/dsh) composition config (`file://` URL, not a separate process). It keeps four things between the assistant and its user:
+The ledger attaches to a single line of a [DSH](https://github.com/deepseek-ai/dsh) composition config as a `file://` URL. No separate process is started. Four record types are maintained between the assistant and its user:
 
-| Kept | What it is |
+| Record | Content |
 | --- | --- |
-| **Debt** | things said to be done and not done |
-| **Criterion** | the checkable condition under which something counts as done |
-| **Lesson** | a mistake actually made, described by its shape, not by its moral |
-| **Boundary** | what is written down as *beyond me* |
+| Debt | work that was declared and has not been completed |
+| Criterion | the checkable condition under which the work counts as finished |
+| Lesson | a mistake that occurred, described by its shape rather than its moral |
+| Boundary | what has been explicitly written down as out of scope |
 
-Retrieval is not triggered by the model wondering whether it remembers something. It is triggered by **events**: a tool fails, a path does not exist, an ID is mistyped. In the same return in which the error happens, the relevant record is already in front of it.
+Retrieval is event-triggered rather than self-triggered. The assistant does not decide to consult its memory; a failing tool, a missing path or a malformed ID causes the relevant record to be included in the same tool return.
 
 ## The loop and its gates
 
-`G` generate a problem → `F` frame it → `S` solve it → `C` converge → `D` deposit → `E` evoke.
+The problem lifecycle is `G` generate → `F` frame → `S` solve → `C` converge → `D` deposit → `E` evoke.
 
-Every stage has a gate that can refuse:
+Each stage has a gate that can refuse the transition:
 
 | Stage | Gate | Refuses |
 | --- | --- | --- |
-| F | `delta` — framing precision, 0–1, lower is better | a statement missing initial state / goal / constraints / operators / success criterion |
-| C | `epsilon` (distance to goal) **and** `delta` | declaring convergence while either is too large; converging right after a re-frame is rejected outright |
-| D | `links`, or an explicit `linkReason` | a deposit that claims no ancestry and will not say why |
-| E | friction against an existing deposit | a new problem invented from nothing |
+| F | `delta`: framing precision, 0–1, lower is better | a statement missing initial state, goal, constraints, available operators or success criterion |
+| C | `epsilon` (distance to goal) **and** `delta` | convergence while either value is too large; convergence immediately after a re-frame is rejected outright |
+| D | `links`, or an explicit `linkReason` | a deposit that claims no ancestry and gives no reason |
+| E | friction against an existing deposit | a new problem with no origin |
 
-**A ledger whose only possible output is "success" is decoration.** Every gate above exists so that a bad step has somewhere to be stopped — including mine.
+A ledger whose only reachable output is "success" cannot be audited. Every gate above exists so that a failed step has a defined place to be stopped, including the engine's own.
 
-## What you can verify yourself
+## What can be verified
 
-Nothing here asks to be believed. Three layers, each one able to catch what the previous cannot:
+Three checking layers are in place, each able to detect what the previous layer cannot.
 
-| Layer | Checker | When |
+| Layer | Checker | Trigger |
 | --- | --- | --- |
-| Docs agree with the filesystem | `test/audit-consistency.mjs` | every `node --test` |
+| Documentation agrees with the filesystem | `test/audit-consistency.mjs` | every `node --test` |
 | The filesystem agrees with the repository | `tools/pre-commit` | every `git commit` |
-| The repository agrees with what a stranger gets | **CI runs `node --test` on a fresh checkout** | every push |
+| The repository agrees with a fresh checkout | CI runs `node --test` on a clean clone | every push |
 
-And the chain that is specific to this repository: every commit message carries an ID; that ID is a deposit; the deposit is a file written by the engine at runtime with a timestamp, the problem it solved, and where it itself was wrong. Take any ID from any commit and follow it — that is the claim, and it is checkable without trusting me.
+The claim specific to this repository is also checkable without trusting the author. Every commit message carries an ID; each ID is a deposit; each deposit is a file written by the engine at runtime, containing a timestamp, the problem it solved and any correction it received later. Any ID from any commit can be followed to its deposit through [docs/ledger.md](docs/ledger.md).
 
-## Where it actually is
+## Current position
 
-The roadmap splits the goal into four faults. The order cannot be reversed: continuous observation first, measurement second.
+The roadmap separates the objective into four faults. The order is fixed: continuous observation first, measurement second.
 
-| Fault | What it means | State |
+| Fault | Description | State |
 | --- | --- | --- |
-| ① Measurement | δ / ε / S / A_k without objective proxies | **partial** — δ and ε are self-reported; the proxy count is not written here because it changes, read it from the engine snapshot |
-| ② Continuity | from "runs when called" to "runs continuously" | **crossed** — patrol runs; rhythm, throttle and quiet hours are implemented |
-| ③ Autonomy | given continuity, generating problems on its own | **not crossed** — patrol does not invent problems, and the "wanting" level does not exist |
+| ① Measurement | `delta`, `epsilon`, `S`, `A_k` without objective proxies | partial: `delta` and `epsilon` are self-reported; the proxy count changes and is read from the engine snapshot rather than restated here |
+| ② Continuity | from running-on-call to running-continuously | crossed: patrol runs, with rhythm, throttle and quiet hours implemented |
+| ③ Autonomy | given continuity, originating problems without a request | not crossed: patrol does not originate problems, and the level of wanting does not exist |
 | ④ Multi-subject | long term | not started |
 
-**The single most important missing thing: it still does not initiate.** It wakes when asked. It can patrol on a schedule, but during a patrol it does not decide what to investigate. It has an endogenous-agenda mechanism, and that mechanism is driven by **rules** (a record went stale, a debt is open) — not by wanting anything.
+The largest open gap is item ③. The system wakes when asked. It can patrol on a schedule, but a patrol does not decide what to investigate. An endogenous-agenda mechanism exists and is driven by rules such as a stale record or an open debt, not by a preference.
 
-How to count it as done: on a day when nobody speaks, the ledger still grows, and what grows is not the routine patrol record.
+The completion condition for ③ is stated operationally: on a day with no user messages, the ledger still grows, and the growth is not the routine patrol record.
 
-## What is still missing
+## Open gaps
 
-Read out of the ledger, not a wish list.
+Each item is read out of the ledger rather than listed as a wish.
 
 | Gap | State |
 | --- | --- |
-| Retrieval surface | improving, still with blind spots — a single-word query cannot clear the scorer's threshold, so the normalisation (`score = inter / eff`, with `eff` owned by the deposit) is the real bottleneck |
-| Bare IDs inside source comments | not links yet |
-| The paper carries "awaiting author sign-off" | requires the author; the repository cannot do it itself |
-| `tools/pre-commit` is not in the repo | by design — `.git/hooks` is local, install once after clone |
-| A worked example of the loop | the concrete example above is prose; a recorded run would be better evidence |
+| Retrieval ranking | in progress; a single-term query does not clear the scorer threshold, so the normalisation `score = inter / eff`, where `eff` belongs to the deposit, is the actual bottleneck |
+| Bare IDs inside source comments | not linked yet |
+| The paper is marked awaiting author sign-off | requires the author; the repository cannot do this itself |
+| `tools/pre-commit` is not tracked | by design: `.git/hooks` is local, installed once after cloning |
+| A recorded end-to-end run | the example above is prose; a recorded run would be stronger evidence |
 
 ## Known issue: Gemini through a gateway returns 400
 
-Not this plugin. Three facts, reproducible in `test/tool-schema.test.mjs`:
+The error does not originate in this plugin. Three facts, reproducible in `test/tool-schema.test.mjs`:
 
 | Approach | Result |
 | --- | --- |
-| What this plugin emits (`required: true` inside the property) | accepted by `defineTool`, and it is standard JSON Schema |
-| Standard JSON Schema fed directly | rejected: `unsupported JSON schema: parameters.type must be a value schema object` |
-| A flat property dictionary | accepted, but `required` is silently lost |
+| What this plugin emits (`required: true` inside the property) | accepted by `defineTool`; the output is standard JSON Schema |
+| Standard JSON Schema submitted directly | rejected: `unsupported JSON schema: parameters.type must be a value schema object` |
+| A flat property dictionary | accepted, but `required` is silently dropped |
 
-The `required: true` in the error sits *inside* a property, which `defineTool` never emits — so what reached the gateway is not this plugin's output. **And the obvious "fix" (switch to standard JSON Schema) makes the plugin fail to load.** Do not do that.
+The `required: true` in the error appears inside a property, which `defineTool` never emits, so the payload that reached the gateway was not produced by this plugin. The apparent fix of switching to standard JSON Schema makes the plugin fail to load and should not be applied.
 
-Workaround: use DeepSeek or another OpenAI-compatible model. If this plugin ran through Gemini for you, your host version and gateway type in [issue #1](https://github.com/NBagent-dev/metaflywheel/issues/1) would turn this from "points at" into "located".
+Workaround: use DeepSeek or another OpenAI-compatible model. If the plugin has run through Gemini in a given deployment, the host version and gateway type recorded in [issue #1](https://github.com/NBagent-dev/metaflywheel/issues/1) would move the diagnosis from an inference to a located fault.
 
 ## Language and data
 
-The interface ships in Chinese and English. Switch without restarting the host:
+The interface is available in Chinese and English, and the locale can be changed without restarting the host:
 
 ```bash
 echo en > .mpm/locale          # or: MPM_LOCALE=en
 ```
 
-Precedence is deliberate: explicit argument > environment variable > `.mpm/locale` > in-process override > default. An environment variable outranks a file because it means *the operator decided*.
+Precedence, in order: explicit argument, environment variable, `.mpm/locale`, in-process override, default. An environment variable outranks the file because it represents an operator decision.
 
-The data layer is a separate question and the answer is simple: **the ledger is written in whatever language its user speaks, and is never translated.** It is a record of what happened, not interface text; translating it would destroy the artefact.
+The data layer is a separate decision: the ledger is written in the language of its user and is never translated. It records what happened rather than presenting an interface, and translating it would destroy the artefact.
 
 | Layer | Policy |
 | --- | --- |
-| Engine text — snapshot lines, tool descriptions, reports | localised via `t(key)` / `TOOL_EN` |
-| Deposits, narrations, `myAction` | written once, in the user's language, never translated |
-| Judges | assert structure (keys, counts, booleans), never a language's substrings |
+| Engine text: snapshot lines, tool descriptions, reports | localised through `t(key)` and `TOOL_EN` |
+| Deposits, narrations, `myAction` | written once in the user's language, never translated |
+| Judges | assert structure (keys, counts, booleans), never substrings of one language |
 
-A missing translation falls back to the source language at runtime and turns CI **red**. Unknown locales fall back to the source, **not to English**.
+A missing translation falls back to the source language at runtime and turns CI red. An unknown locale falls back to the source language, not to English.
 
-Adding a documentation language: copy `README.md` to `README.<tag>.md`, translate **in full**, add it to every language bar, keep the section count identical — a judge checks that, which is how it notices a section added in only one language. There is no automatic translation: machine output looks complete while unchecked, and unchecked claims do not ship.
+To add a documentation language, copy `README.md` to `README.<tag>.md`, translate it in full, add it to every language bar and keep the section count identical. A judge checks the section count, which is how a section added in only one language is detected. Automatic translation is deliberately not used: machine output looks complete while remaining unchecked, and unverified claims are not released.
 
 ## Contributing
 
-The bar here is not code style. **It is whether you left a record that can be checked.** A change should answer three questions:
+The requirement for a change is not code style. It is whether the change leaves a record that can be checked. A change should answer three questions:
 
-1. **What concrete problem did it solve?** Not "improved the architecture", but "judge X misfires under condition Y".
-2. **How do you know it is solved?** A new judge went red because of it, or a meter's number got better.
-3. **Where could it be wrong?** Check that yourself, on the data, before review does.
+1. Which concrete problem does it solve? Not "improves the architecture", but "judge X misfires under condition Y".
+2. How is the fix demonstrated? Either a new judge failed before the change and passes after it, or a meter's value improved.
+3. Where could it be wrong? Verify that against the data before review does.
 
-Rules that follow from the bar, and that have all been violations here first:
+The following rules follow from that requirement, and each of them was violated in this repository first:
 
-- a judge must be able to go **red on the old code**; a check that cannot fail is worse than none
-- **negative controls** — if silence also passes, "passing" proves nothing
-- a meter that only reports numbers does not belong in the test suite; mixing them makes "all green" meaningless
-- **the assertion must not claim more than the fixture controls**
-- a cache key must cover every input that shapes the output — this has been a real bug three times
-- retirement is not deletion: an obsolete deposit leaves retrieval and stays reachable by ID
-- when a summary is used, print the components — otherwise the summary hides what it summarises
-- before measuring a new capability, **prove the ruler works** (otherwise "no change" and "never measured" look identical)
+- a judge must be able to fail on the old code; a check that cannot fail is worse than no check
+- negative controls are required: if silence also passes, a passing result demonstrates nothing
+- a meter that only reports numbers does not belong in the test suite, because mixing them makes "all green" meaningless
+- an assertion must not claim more than its fixture controls
+- a cache key must cover every input that shapes the output; this has been a defect three times
+- retirement is not deletion: an obsolete deposit leaves retrieval and remains reachable by ID
+- when a summary is used, the components are printed alongside it, otherwise the summary hides what it summarises
+- before measuring a new capability, the measuring instrument is validated first, otherwise "no change" and "never measured" are indistinguishable
 
 Before submitting:
 
@@ -165,9 +170,9 @@ node --test                                  # must be all green
 cp tools/pre-commit .git/hooks/pre-commit    # once; checks every commit after
 ```
 
-Write **why**, not what. If the change came from a recorded decision, carry its ID: `fix: judge ⑦ misreads dates (P571)`.
+Commit messages state why rather than what. When a change follows from a recorded decision, the ID is carried in the message: `fix: judge ⑦ misreads dates (P571)`.
 
-You do not need to read the paper first, you do not need to understand the internal IDs — `P019-M14` is bookkeeping, and **if you only want to know what the project does, you never need to read one** — and you do not need to agree with the project's aim. A change that makes the tests faster is valuable either way.
+Reading the paper is not a prerequisite. Understanding internal IDs is not required either: `P019-M14` is bookkeeping, and an ID never has to be read in order to understand what the project does. Agreement with the project's objective is not required; a change that makes the tests faster or the judges sharper is valuable regardless.
 
 ## Reference
 
@@ -175,24 +180,24 @@ You do not need to read the paper first, you do not need to understand the inter
 engine/            the engine (host plugin, no separate process)
   modules/         one module per file
 test/              four kinds of file, see below
-docs/              paper (draft) · implementation notes · ID index
+docs/              paper (draft), implementation notes, ID index
 tools/             pre-commit gate, probes, meters
 install/           mounting and deployment
 view/              optional visualisation
 ```
 
-| Kind of file in `test/` | Naming | In `node --test` | Purpose |
+| Kind of file in `test/` | Naming | Runs under `node --test` | Purpose |
 | --- | --- | --- | --- |
-| Judge | `*.test.mjs` | yes | fails when unsatisfied |
+| Judge | `*.test.mjs` | yes | fails when a requirement is not met |
 | Meter | `audit-*.mjs` | no | prints numbers, asserts nothing |
 | Generator | `gen-ledger-doc.mjs` | no | regenerates `docs/ledger.md` |
-| One-off script | `check-*` `read-*` `run-*` | no | kept because it was useful once |
+| One-off script | `check-*`, `read-*`, `run-*` | no | retained because it was useful once |
 
-`docs/ledger.md` is generated from the ledger — do not edit it by hand. It is the largest text file here, so every ledger change shows as a large diff; that is a known cost.
+`docs/ledger.md` is generated from the ledger and must not be edited by hand. It is the largest text file in the repository, so every ledger change appears as a large diff; this is a known cost.
 
-Two judges are environment-aware and skip themselves with a printed reason: the source-vs-runtime copy check, and the `defineTool` contract check. That skip is why "works on a clean clone" is true rather than assumed.
+Two judges are environment-aware and skip themselves with a printed reason: the source-to-runtime copy check, and the `defineTool` contract check. Those skips are why "runs on a clean clone" holds rather than being assumed.
 
-The paper, [docs/theory.md](docs/theory.md), is marked "awaiting author sign-off". It is not published literature and should not be cited as external authority.
+The paper, [docs/theory.md](docs/theory.md), is marked awaiting author sign-off. It is not published literature and should not be cited as external authority.
 
 ## License
 

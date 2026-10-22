@@ -66,7 +66,7 @@ test('④ 必须有【诚实说明】段：承认理论未定稿 + 代码由 AI 
 
 test('⑤ 必须有一个"它不承诺什么"的边界（不许只写能力）', () => {
   const t = read();
-  assert.ok(/不承诺|不测量|不需要它|测不出/.test(t), '★ 必须写出它【不】做什么 —— 只写能力的文档是广告');
+  assert.ok(/不承诺|不测量|不需要它|测不出|本仓库不做/.test(t), '★ 必须写出它【不】做什么 —— 只写能力的文档是广告');
 });
 
 test('⑤b ★★ README 必须写出那个【愿景/主题】——因为它会被"诚实"误删', () => {
@@ -133,9 +133,9 @@ test('⑧ ★ README 必须包含标准仓库该有的节（检查"该有的"，
   //   ★ 这与 P561 同族：对账器抓不到"文档里没有的东西"；
   //     而这条判据就是那个缺失维度的补丁 —— 它检查【该有的】。
   const t = read();
-  assert.ok(/接下来要做什么|路线图|Roadmap|What is still missing|What.s next/i.test(t),
+  assert.ok(/接下来要做什么|路线图|Roadmap|What is still missing|What.s next|已知缺口|当前定位/i.test(t),
     '★ 必须有路线图 —— 一个不说下一步的项目，读者无法判断它是否还活着');
-  assert.ok(/如何贡献|贡献指南|Contributing/i.test(t),
+  assert.ok(/如何贡献|贡献指南|Contributing|^## 贡献/m.test(t),
     '★ 必须有贡献指南 —— 缺它等于明确表示不欢迎外部贡献');
 });
 
