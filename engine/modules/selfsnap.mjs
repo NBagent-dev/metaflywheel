@@ -59,7 +59,7 @@ function renderSnapshotInner(d) {
       active.push('【' + p.id + '】' + p.title + ' @' + p.stage + '(δ=' + (p.delta == null ? '—' : p.delta) + ' ε=' + (p.epsilon == null ? '—' : p.epsilon) + ' C=' + p.cost + (p.deltaCredit != null && p.deltaCredit < 1 ? t('snap.deltaCredit') + p.deltaCredit : '') + ')' + (d.isParked(p) ? '·PARKED' : ''));
     } else if (p.stage !== 'G' && p.stage !== 'F' && p.stage !== 'S') backlog += 1;
   }
-  lines.push(t('snap.identity') + (active.length ? active.join(t('snap.period')) : t('snap.idle')) + (backlog ? t('snap.backlogPre') + backlog + t('snap.backlogPost') : ''));
+  lines.push(t('snap.identity') + (active.length ? active.join(t('snap.semicolon')) : t('snap.idle')) + (backlog ? t('snap.backlogPre') + backlog + t('snap.backlogPost') : ''));
   if (state.sediments.length) {
   // ★fresh / staleCount / nowMs 必须在这里重建：本块替换掉的是**整个 if 体**，
   //   而这三个变量原本定义在体内。少了它们 ⇒ ReferenceError: fresh is not defined
@@ -180,7 +180,7 @@ function renderSnapshotInner(d) {
   if (valLine) lines.push(valLine);
   if (state.patrol && state.patrol.rounds) lines.push(t('snap.patrolHead') + state.patrol.rounds + t('snap.patrolMin') + Math.max(0, Math.round((Date.now() - state.patrol.lastAt) / 60000)) + t('snap.patrolEnd'));
   if (state.measure && state.measure.driftSignals && state.measure.driftSignals.length) {
-    lines.push(t('snap.driftSigHead') + state.measure.driftSignals.join(t('snap.period')) + t('snap.driftSigEnd'));
+    lines.push(t('snap.driftSigHead') + state.measure.driftSignals.join(t('snap.semicolon')) + t('snap.driftSigEnd'));
   }
   // P487④：账本对账——只在**不一致时**出现（一致时沉默，免得变成每轮噪声）。
   // 孤儿=磁盘上有而我不记得；幽灵=我记得而磁盘上没有。两者都是"我以为我有"的裂缝。
@@ -192,7 +192,7 @@ function renderSnapshotInner(d) {
   if (state.constitution && state.constitution.autonomy) {
     lines.push(t('snap.autonomyHead') + state.constitution.log.length + t('snap.autonomyEnd'));
   } else if (state.constitution && state.constitution.pending && state.constitution.pending.length) {
-    lines.push(t('snap.pendingHead') + state.constitution.pending.length + t('snap.pendingMid') + state.constitution.pending.map(function (p) { return p.signal; }).join(t('snap.period')) + t('snap.pendingEnd'));
+    lines.push(t('snap.pendingHead') + state.constitution.pending.length + t('snap.pendingMid') + state.constitution.pending.map(function (p) { return p.signal; }).join(t('snap.semicolon')) + t('snap.pendingEnd'));
   }
   if (d.drift.active && d.drift.reason) lines.push(t('snap.driftHead') + d.drift.reason + t('snap.driftEnd'));
   const stale = [];
@@ -203,7 +203,7 @@ function renderSnapshotInner(d) {
       stale.push(p2.id + ' ' + Math.round((Date.now() - p2.updatedAt) / 60000) + t('snap.staleUnit'));
     }
   }
-  if (stale.length) lines.push(t('snap.staleHead') + stale.join(t('snap.period')) + t('snap.staleEnd'));
+  if (stale.length) lines.push(t('snap.staleHead') + stale.join(t('snap.semicolon')) + t('snap.staleEnd'));
   // ★P482：**写下的承诺必须看得见**（可见性是判据的前提——今晚判据①正是靠"打出一行 mode"
   //   才抓出自己兄弟的死代码）。此处只读不写，且未写承诺的题完全不出现在这一行。
   const prom = [];
@@ -224,9 +224,9 @@ function renderSnapshotInner(d) {
     if (sp.kind === 'promise') prom.push(p3.id + t('snap.promisePre') + (expr.length > 60 ? expr.slice(0, 60) + t('snap.ellipsis') : expr) + t('snap.quoteClose'));
     else wish.push(p3.id + t('snap.wishPre') + (expr.length > 60 ? expr.slice(0, 60) + t('snap.ellipsis') : expr) + t('snap.quoteClose'));
   }
-  if (prom.length) lines.push(t('snap.promiseHead') + prom.join(t('snap.period')) + t('snap.period'));
-  if (wish.length) lines.push(t('snap.wishHead') + wish.join(t('snap.period')) + t('snap.period'));
-  if (due.length) lines.push(t('snap.dueHead') + due.join(t('snap.period')) + t('snap.dueTail'));
+  if (prom.length) lines.push(t('snap.promiseHead') + prom.join(t('snap.semicolon')) + t('snap.period'));
+  if (wish.length) lines.push(t('snap.wishHead') + wish.join(t('snap.semicolon')) + t('snap.period'));
+  if (due.length) lines.push(t('snap.dueHead') + due.join(t('snap.semicolon')) + t('snap.dueTail'));
   // ★P482⑨ 最后一米：**履行与无视必须可比**——否则"没做"在账本里看不见
   const ps = state.measure && state.measure.promiseStats;
   if (ps) {
