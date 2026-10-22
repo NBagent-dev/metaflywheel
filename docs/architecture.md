@@ -1,111 +1,102 @@
 # MetaFlywheel
 
-**一个住在 AI 代理进程里的「问题账本」。**
+**English** · [简体中文](architecture.zh-CN.md)
 
-它让一个 AI 助手不要每次对话都从零开始——把做过的事、犯过的错、你说过的判断，
-落成跨对话可追溯的条目，并在**该用的时候**把它们摆到面前。
+**A problem ledger that lives inside the AI agent's process.**
 
----
-
-## 它解决什么问题
-
-AI 代理有一个反复出现的毛病：**它没有跨会话连续的主体。**
-
-- 这次修好的 bug，下次会以同样的方式再犯
-- 你上次说"这个方向不对"，它这次可能又走回去
-- 它说"做完了"，而没人核过它是否真的做了
-- 更麻烦的是：它不知道**自己标过"没验"的事**还挂在那里
-
-MetaFlywheel 给这类代理一个能活过进程重启的账本。它不是"记忆检索"，它更像**欠账**：
-
-| 它记的是 | 而不是 |
-|---|---|
-| 哪件事被标为"没验"，而尚未被核销 | 一段可被检索进上下文的文本 |
-| 哪条判断被使用者改变过，而账本必须跟着变 | 一条固定不变的用户偏好 |
-| 哪条教训**挡住过**一次错误 | 一份"最佳实践"清单 |
-
-最后一行是这类系统最反直觉的一点：**一条真正起作用的教训，它的引用次数可能是 0**——
-因为它的成功表现是"那个错误没有发生"，而**没有发生的事不会留下记录**。
+It stops an AI assistant from starting from zero in every conversation: what it did, what it got wrong and what the user judged are written down as entries that survive restarts, and those entries are placed in front of it **at the moment they apply**.
 
 ---
 
-## 一条可核对的东西
+## The problem it solves
+
+An AI agent has one recurring defect: **it has no subject that persists across sessions.**
+
+- a bug fixed in one session is reintroduced the same way in the next
+- the user says "this direction is wrong", and the next session walks back into it
+- it reports "done", and nobody has checked whether it was done
+- worse: it does not know that **the thing it marked "not verified"** is still hanging there
+
+MetaFlywheel gives such an agent a ledger that outlives the process. This is not memory retrieval; it is closer to **outstanding debt**:
+
+| What it keeps | Rather than |
+| --- | --- |
+| which item was marked "not verified" and has not been closed | a chunk of text retrievable into context |
+| which judgement the user changed, so the ledger must change too | a fixed user preference |
+| which lesson **blocked** an error | a list of best practices |
+
+The last row is the least intuitive property of this class of system: **a lesson that actually works may have zero citations** — because its success shows up as *the mistake did not happen*, and **what does not happen leaves no record**.
+
+---
+
+## Something that can be checked
 
 ```
-npm test   →   全部通过 通过
+npm test   →   all passing
 ```
 
-而重点不是数字。是这 221 条里有相当一部分**被专门设计成能失败**：
+The number is not the point. The point is that a substantial part of the suite is **designed to be able to fail**:
 
-- 喂一个坏数据结构 → 它必须报错，不许静默显示 `0`
-- 一段正常输出里出现错误字样 → 它必须**沉默**（误报比漏报更糟：噪声会被忽略）
-- 任何一条沉积被引用 → 那个 ID 必须在账本里真实存在（打错一个字符就静默失效）
+- feed it a malformed data structure → it must raise, never quietly display `0`
+- let an error word appear in normal output → it must **stay silent** (a false alarm is worse than a miss: noise gets ignored)
+- cite any deposit → that ID must really exist in the ledger (one wrong character fails silently)
 
-一个永远通过的测试不携带任何信息。所以每条判据都配了它的反例。
+A test that can never fail carries no information, so every judge ships with its counterexample.
 
 ---
 
-## 怎么跑起来
+## Running it
 
 ```bash
 git clone <this-repo> && cd metaflywheel
-npm test                      # 221 条判据，不需要任何外部服务
+npm test                      # the whole suite; no external service required
 ```
 
-它需要一个宿主才能工作（**不是独立 npm 包**）——当前实现挂在 [DSH](https://github.com/deepseek-ai/dsh)
-的组合行上，通过 `file://` URL 加载。安装细节见 [docs/install.zh-CN.md](install.zh-CN.md)。
+It needs a host to work (**it is not a standalone npm package**). The current implementation attaches to a composition line of [DSH](https://github.com/deepseek-ai/dsh) and is loaded through a `file://` URL. Installation is in [docs/install.md](install.md).
 
 ---
 
-## 诚实的说明（这一段比上面都重要）
+## Honest notes (this section matters more than the ones above)
 
-1. **理论部分是一份未定稿。** [docs/theory.md](theory.md) 是一篇约 4 万字的方法论文，
-   由仓库使用者和 AI 协作写成，**标着"作者终审待做"**。它不是已发表文献，也不该被当作外部权威引用。
+1. **The theory is a draft.** [docs/theory.md](theory.md) is a methodology paper of roughly forty thousand characters, written by the repository's user together with an AI, and **marked "awaiting author sign-off"**. It is not published literature and should not be cited as external authority.
 
-2. **代码有相当比例由 AI 写。** 这一点不打算掩饰。而每一条判据都经过人工审查并**留有失败记录**——
-   写它的过程中被它抓到的错误，比它能证明的东西更多。
+2. **A substantial part of the code was written by an AI.** That is not being hidden. Every judge was reviewed by a human and **keeps its failure record** — during development the judges caught more mistakes than they ever proved.
 
-3. **这个仓库里有一种内部编号（如 `P019-M14`）。** 它们是这个项目自己的台账编号，
-   指向曾经的某次具体修复。**如果你只是想知道这个东西干什么，不需要看任何一个编号。**
-   想知道每条编号背后的故事，见 [docs/ledger.md](ledger.md)。
+3. **The repository contains internal IDs (for example `P019-M14`).** They are this project's own bookkeeping, pointing at a specific past repair. **If you only want to know what this thing does, you never need to read one.** For the story behind each ID, see [docs/ledger.md](ledger.md).
 
-4. **它不承诺"有意识"，也不测量那个。** 有一项面板专门问"它是否在变强"，
-   而它同时明确写着：**"这十项即使全绿，也只说明可审计的那部分全绿。"**
+4. **It does not promise "consciousness", and it does not measure it.** There is a panel that asks "is it getting stronger", and the panel states in the same breath: **"even if these ten are all green, that only means the auditable part is green."**
 
 ---
 
-## 所以它值不值得看
+## Whether it is worth reading
 
-如果你的场景是 **"让 AI 助手在长期协作中不反复犯同一类错"**，值得看这个仓库。
+If the scenario is **"keep an AI assistant from repeating the same class of mistake across long collaboration"**, this repository is worth a look.
 
-如果你的场景是 **"让 AI 记住更多东西"**，那用向量库就够，不需要它。
+If the scenario is **"make the AI remember more"**, a vector store is enough and this project is not needed.
 
-它的全部主张可以压成一句：
+Its whole claim compresses to one line:
 
-> **一个能跨对话活着的账本，比一个更聪明的模型，更能防止同一类错误第二次发生。**
+> **A ledger that lives across conversations prevents the same class of error from happening twice better than a smarter model does.**
 
-而这句主张有一个代价：**它要求你（使用者）也被记账**——你说过的判断会被记住，
-你改主意会被留痕，你标过"没验"的东西会一直挂在清单上，直到被核销。
+And that claim has a price: **it records the user too** — judgements you stated are remembered, changes of mind leave a trace, and anything you marked "not verified" stays on the list until it is closed.
 
 ---
 
-## 目录
+## Layout
 
 ```
-engine/            引擎本体（宿主插件，无独立进程）
-  modules/         各功能模块，一个模块一个文件
-test/              221 条判据（node --test，零依赖）
-docs/              theory.md（未定稿论文）· architecture.md（实现细节）· ledger.md（编号索引）
-install/           挂载与部署
-view/              可选的可视化
+engine/            the engine (host plugin, no separate process)
+  modules/         one module per file
+test/              the judges (node --test, zero dependencies)
+docs/              theory.md (draft paper) · architecture.md (this file) · DEVELOPMENT.md (implementation) · ledger.md (ID index)
+install/           mounting and deployment
+view/              optional visualisation
 ```
 
-想看实现细节 → [docs/architecture.md](architecture.md)
-想看那篇论文 → [docs/theory.md](theory.md)
-想知道某个编号是什么 → [docs/ledger.md](ledger.md)
+For implementation detail, read [docs/DEVELOPMENT.md](DEVELOPMENT.md). For the paper, read [docs/theory.md](theory.md). To find out what an ID means, read [docs/ledger.md](ledger.md).
 
 ---
 
-## 许可
+## License
 
 MIT

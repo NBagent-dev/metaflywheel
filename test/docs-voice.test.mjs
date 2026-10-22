@@ -23,6 +23,10 @@ const REGIME = {
   'README.zh-CN.md': 'impersonal',
   'docs/install.md': 'impersonal',
   'docs/install.zh-CN.md': 'impersonal',
+  'docs/architecture.zh-CN.md': 'impersonal',
+  'docs/DEVELOPMENT.zh-CN.md': 'impersonal',
+  'docs/architecture.zh-CN.md': 'impersonal',
+  'docs/DEVELOPMENT.zh-CN.md': 'impersonal',
   'docs/architecture.md': 'impersonal',
   'docs/DEVELOPMENT.md': 'impersonal',
   'docs/intelligence-network.md': 'impersonal',
@@ -97,7 +101,11 @@ test('④ 每条 README/docs 都必须有标题（没有标题的文件不可能
 // 结果 install.md 一度只有中文，而 README 声称双语。**"某个页面"最容易被漏掉。**
 const GROUPS = [
   ['README.md', 'README.zh-CN.md'],
-  ['docs/install.md', 'docs/install.zh-CN.md']
+  ['docs/install.md', 'docs/install.zh-CN.md'],
+  ['docs/architecture.md', 'docs/architecture.zh-CN.md'],
+  ['docs/DEVELOPMENT.md', 'docs/DEVELOPMENT.zh-CN.md'],
+  ['docs/architecture.md', 'docs/architecture.zh-CN.md'],
+  ['docs/DEVELOPMENT.md', 'docs/DEVELOPMENT.zh-CN.md']
 ];
 
 test('⑥ 双语文档组：语言栏必须互链，小节数必须相等', () => {
