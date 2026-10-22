@@ -7,7 +7,7 @@
 
 **B 臂（无引擎）**
 1. 备份：`Copy-Item ~\.dsh\mpm\cordis.patch.user.yml ~\.dsh\mpm\cordis.patch.user.AB-backup.yml`
-2. 替换：用 `install/ab-test/no-engine.cordis.patch.user.example.yml` 的内容覆盖 `~\.dsh\mpm\cordis.patch.user.yml`
+2. 替换：用 `docs/experiments/ab-test/no-engine.cordis.patch.user.example.yml` 的内容覆盖 `~\.dsh\mpm\cordis.patch.user.yml`
 3. 重启 DSH → 开**新会话** → 按「任务书」逐条执行（新会话里没有 MPM 工具/快照= B 臂）
 4. 会话结束后把完整对话（或你的操作记录）保存路径给我（B 会话日志；也可直接把对话粘贴）
 

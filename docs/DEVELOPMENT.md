@@ -96,7 +96,7 @@ DSH 宿主
 ### 3.5 一次性探针（`_` 前缀）
 
 `_p247_ctrlcheck` · `_p247_sigtest` · `_p327_eventcontract` · `_p327_persistcheck` ·
-`_p328_interference` · `_p332_boot_check` · `_p332_runstamp_check` · `_p339_agenda_pick`
+`tools/probes/_p328_interference` · `tools/probes/_p332_boot_check` · `tools/probes/_p332_runstamp_check` · `tools/probes/_p339_agenda_pick`
 
 **⇒ 它们只在源码里，不进运行副本**（由 `test/engine-sync.test.mjs` 的"未接线但有独立入口"一档保证）。
 

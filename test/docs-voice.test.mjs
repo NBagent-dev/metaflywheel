@@ -28,7 +28,7 @@ const REGIME = {
   'docs/engine-structure.md': 'impersonal',
   'docs/issue-1-reply.md': 'subject',
   'docs/experiment-phenomenal-layer.md': 'quotes',
-  'docs/theory.md': 'quotes',
+  'docs/theory.md': 'impersonal',
   'docs/ledger.md': 'generated'
 };
 
@@ -53,6 +53,7 @@ const ZH_FP = /(?<!自)我/;
 const violations = function (p) {
   const out = [];
   body(p).split('\n').forEach(function (line, i) {
+    if (/^\s*\[\d+\]\s/.test(line)) return;  // 参考文献逐字引用，不判语域（'Systeme I[J]' 的 I 是卷期标记）
     if (EN_FP.test(line) || ZH_FP.test(line) || line.indexOf('!') >= 0 || line.indexOf('！') >= 0) {
       out.push('L' + (i + 1) + ': ' + line.trim().slice(0, 80));
     }
