@@ -79,6 +79,22 @@ export async function appendEventLine(writer, line) {
   }
 }
 
+/**
+ * 有界滚动拼接：把一行接到文本末尾，**只保留最后 max 行**。
+ * ★ 为什么要有界：`fsSvc` 没有 append，只能「读—拼—写」；若事件文件无界增长，
+ *   每次 persist 都在搬一个越来越大的字符串，最终把一次落盘变成 O(n) 的搬运 ——
+ *   那是把「可审计」换成了「越来越慢」。
+ * ★ 为什么保留**最后** N 行：最近的才是「刚才那次写盘改了什么」。
+ */
+export function trimEventLines(prevText, line, max) {
+  const cap = (typeof max === 'number' && max > 0) ? Math.floor(max) : 500;
+  const old = String(prevText == null ? '' : prevText).split(/\r?\n/).filter(function (x) { return x && x.trim(); });
+  const add = String(line == null ? '' : line).trim();
+  const all = add ? old.concat([add]) : old;
+  const kept = all.slice(-cap);
+  return { text: kept.length ? (kept.join('\n') + '\n') : '', kept: kept.length, dropped: all.length - kept.length };
+}
+
 /** 解析 events.jsonl 内容（坏行跳过并计数——日志损坏不许拖垮加载）。 */
 export function parseEvents(text) {
   const lines = String(text || '').split(/\r?\n/);

@@ -108,6 +108,7 @@ import { mergePrincipalLists } from "./principal.mjs";   // ★P517（**第 4 �
 import { mergeUnknowns } from "./unknowns.mjs";          // ★P517③：未核清单（记忆的另一半：我不知道的东西）
 import { mergeHits } from "./hits.mjs";                  // ★P519：回流（命中的处置必须留痕）
 import { mergeAdopts } from "./adopt.mjs";               // ★P526：采用（动手前检索并真的采用）
+import { formatEventLine, trimEventLines } from "./events-log.mjs";   // ★P594③：增量日志（**旁路**：失败不影响落盘）
 
 export function mergePresenceInto(perception, lastActive, pres) {
   if (!pres) return false;                       // 负控：没有磁盘证据 ⇒ 什么都不做（不许凭空造）
@@ -294,6 +295,8 @@ async function remapForeignSedimentsImpl(e) {
 //        **单槽位固定名** `flywheel.json.bak`：天然有界，不需要轮转、也不需要删除。
 //   mode 只剩两种取值：'service-atomic' | 'failed'。
 const BACKUP_SUFFIX = '.bak';
+/** ★P594③：事件日志保留行数（有界滚动：最近的才是「刚才那次写盘改了什么」）。 */
+const EVENTS_MAX = 500;
 
 /** 落盘结论的统一文案（P487①：任何工具报告都必须带上它，不许无条件断言"已落盘"）。 */
 export function persistNote(pr) {
@@ -357,10 +360,31 @@ async function persistImpl(e) {
         backup = '上一版 ' + out.before.length + ' 字符 → flywheel.json' + BACKUP_SUFFIX;
       } catch (e2) { backup = '备份失败：' + (e2 && e2.message ? e2.message : String(e2)); }
     }
+    // ★P594③：增量日志（**旁路**）。三条硬约束：
+    //   ① 它失败**绝不影响落盘**（不 return、不改 ok）——日志是审计，不是前置条件；
+    //   ② 只保留最后 EVENTS_MAX 行（fsSvc 无 append ⇒ 读—拼—写；无界增长会把落盘变成 O(n) 搬运）；
+    //   ③ 结果写进返回值的 events 字段 ⇒ 「日志没写成」必须可见，不许静默。
+    let events = null;
+    try {
+      const evRec = formatEventLine(e.lastEventSummary || null, { state: plain }, Date.now(), {
+        via: 'persist',
+        bytes: json.length,
+        before: (out && typeof out.before === 'string') ? out.before.length : 0
+      });
+      const evTarget = await e.fsSvc.resolve(stateFile(e.root.current).replace(/flywheel\.json$/, 'events.jsonl'));
+      let evPrev = '';
+      try { evPrev = await e.fsSvc.readText(evTarget); } catch (e0) { evPrev = ''; }
+      const evCut = trimEventLines(evPrev, evRec, EVENTS_MAX);
+      await e.fsSvc.writeText(evTarget, evCut.text);
+      events = { ok: true, kept: evCut.kept, dropped: evCut.dropped };
+      e.lastEventSummary = { state: plain };
+    } catch (e3) {
+      events = { ok: false, reason: (e3 && e3.message) ? e3.message : String(e3) };
+    }
     await writeHintImpl(e);
     // ★全函数**唯一的成功返回**：负控（_p327_persistcheck.mjs）靠注入它把出货代码降级成
     //   "成功也返回 undefined"。多一个成功出口就会让负控失效——已实测一次。
-    return { ok: true, target: (target && target.displayPath) ? target.displayPath : '(target)', mode: 'service-atomic', bytes: json.length, verify: verify, backup: backup, operation: out && out.operation };
+    return { ok: true, target: (target && target.displayPath) ? target.displayPath : '(target)', mode: 'service-atomic', bytes: json.length, verify: verify, backup: backup, events: events, operation: out && out.operation };
   } catch (e2) {
     const reason = e2 && e2.message ? e2.message : String(e2);
     console.error('[mpm][engine] 持久化失败:', reason);
