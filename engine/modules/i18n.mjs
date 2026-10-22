@@ -35,7 +35,21 @@ const TABLES = {
     'aware.age': '（{n} 天未叙述）',
     'aware.never': 'A7（从未叙述）',
     'aware.gaps': '（{list} 无数据源或无字段，不是失败）',
-    'aware.line': '- {head}：退化 {deg} · 静止 {still} · 可量 {m}/{t}{gaps}。'
+    'aware.line': '- {head}：退化 {deg} · 静止 {still} · 可量 {m}/{t}{gaps}。',
+    // ★P608 节律那一行（快照里每轮都出现）
+    'rhythm.self': '自我设定',
+    'rhythm.factory': '出厂默认',
+    'rhythm.quiet': ' · 静默 {a}-{b} 时',
+    'rhythm.floor': ' · 效价门槛 {n}（低于它不自主发动）',
+    'rhythm.floor.none': ' · 效价门槛未设',
+    'rhythm.line': '- 节律({src})：陈旧 {stale}min · 发动节流 {thr}min{q}{vf}{tail}',
+    'rhythm.tail.self': '——**由我自己写下，非出厂常数**（mpm_rhythm 可改，reset 回出厂）',
+    'rhythm.tail.factory': '（未被改写；mpm_rhythm 可改写自己的节律）',
+    'rhythm.gate.none': '未设效价门槛',
+    'rhythm.gate.pass': 'R(t)={r} ≥ 门槛 {f}',
+    'rhythm.gate.block': 'R(t)={r} 低于门槛 {f}',
+    'rhythm.reject.unknown': '{k}：不认识的项',
+    'rhythm.reject.range': '{k}={v}：越界或非整数（允许 {a}~{b}）'
   },
   en: {
     'hits.head': '- Hit feedback loop (P519·**source→behaviour→record→source**): {total} hits · **{open} undisposed**',
@@ -56,7 +70,21 @@ const TABLES = {
     'aware.age': ' ({n} days without narration)',
     'aware.never': 'A7 (never narrated)',
     'aware.gaps': ' ({list}: no data source or no field - not a failure)',
-    'aware.line': '- {head}: degraded {deg} · static {still} · measurable {m}/{t}{gaps}.'
+    'aware.line': '- {head}: degraded {deg} · static {still} · measurable {m}/{t}{gaps}.',
+    // ★P608 the rhythm line (shown in every snapshot)
+    'rhythm.self': 'self-set',
+    'rhythm.factory': 'factory default',
+    'rhythm.quiet': ' · quiet {a}-{b}h',
+    'rhythm.floor': ' · valence floor {n} (no self-initiated fire below it)',
+    'rhythm.floor.none': ' · valence floor: not set',
+    'rhythm.line': '- Rhythm ({src}): stale {stale}min · fire throttle {thr}min{q}{vf}{tail}',
+    'rhythm.tail.self': ' - **written by me, not a factory constant** (mpm_rhythm can change it; reset restores the factory values)',
+    'rhythm.tail.factory': ' (never rewritten; mpm_rhythm can rewrite its own rhythm)',
+    'rhythm.gate.none': 'no valence floor set',
+    'rhythm.gate.pass': 'R(t)={r} >= floor {f}',
+    'rhythm.gate.block': 'R(t)={r} below floor {f}',
+    'rhythm.reject.unknown': '{k}: unknown key',
+    'rhythm.reject.range': '{k}={v}: out of range or not an integer (allowed {a}~{b})'
   }
 };
 

@@ -16,6 +16,7 @@
 //   巡检**定时器的间隔**（PATROL_MS）仍为出厂值——改它要重排宿主定时器，属独立风险，未纳入本轮。
 
 import { valenceOf } from './valence.mjs';   // ★P482⑦：效价门禁要用 R(t)——**只算一处**，不另写一套
+import { t } from './i18n.mjs';              // ★P608：渲染层走 t()（zh 输出逐字节不变，有冻结黄金守着）
 
 export const FACTORY = { staleMinutes: 30, fireThrottleMinutes: 45, quietFrom: null, quietTo: null, valenceFloor: null };
 export const BOUNDS = {
@@ -45,13 +46,13 @@ export function rhythmOf(state) {
  * @param {object} patch 只想改的项
  * @param {object} base  当前节律（通常是 rhythmOf(state)）
  */
-export function normalizeRhythm(patch, base) {
+export function normalizeRhythm(patch, base, locale) {
   const next = Object.assign({}, FACTORY, base || {});
   const rejected = [];
   const keys = Object.keys(patch || {});
   for (let i = 0; i < keys.length; i++) {
     const k = keys[i];
-    if (INT_KEYS.indexOf(k) < 0) { rejected.push(k + '：不认识的项'); continue; }
+    if (INT_KEYS.indexOf(k) < 0) { rejected.push(t('rhythm.reject.unknown', { k: k }, locale)); continue; }
     const v = patch[k];
     // ★未提供（undefined）不是错误：实机撞到过——只想改陈旧阈值，工具把未提供的
     //   fireThrottleMinutes(undefined) 也送进校验，报了一条"越界"。值没错，但**报了假警**。
@@ -60,7 +61,7 @@ export function normalizeRhythm(patch, base) {
     if (v === null) { next[k] = null; continue; }        // 显式清除（静默时段）
     const b = BOUNDS[k];
     if (typeof v !== 'number' || !isFinite(v) || Math.round(v) !== v || v < b[0] || v > b[1]) {
-      rejected.push(k + '=' + JSON.stringify(v) + '：越界或非整数（允许 ' + b[0] + '~' + b[1] + '）');
+      rejected.push(t('rhythm.reject.range', { k: k, v: JSON.stringify(v), a: b[0], b: b[1] }, locale));
       continue;
     }
     next[k] = v;
@@ -95,20 +96,30 @@ export function valenceFloorOf(state) {
  * 未设门槛 ⇒ 永远 open（与引入前逐字一致）。
  * @returns {{open:boolean, r:number, floor:number|null, why:string}}
  */
-export function valenceGate(rhythm, state, nowMs) {
+export function valenceGate(rhythm, state, nowMs, locale) {
   const floor = (rhythm && typeof rhythm.valenceFloor === 'number') ? rhythm.valenceFloor : null;
   const r = valenceOf(state, nowMs);
-  if (floor == null) return { open: true, r: r, floor: null, why: '未设效价门槛' };
-  if (r >= floor) return { open: true, r: r, floor: floor, why: 'R(t)=' + r.toFixed(1) + ' ≥ 门槛 ' + floor };
-  return { open: false, r: r, floor: floor, why: 'R(t)=' + r.toFixed(1) + ' 低于门槛 ' + floor };
+  if (floor == null) return { open: true, r: r, floor: null, why: t('rhythm.gate.none', null, locale) };
+  if (r >= floor) return { open: true, r: r, floor: floor, why: t('rhythm.gate.pass', { r: r.toFixed(1), f: floor }, locale) };
+  return { open: false, r: r, floor: floor, why: t('rhythm.gate.block', { r: r.toFixed(1), f: floor }, locale) };
 }
 
 /** 快照那一行：**必须区分来源**——自我设定 vs 出厂默认。 */
-export function rhythmLine(state) {
+export function rhythmLine(state, locale) {
   const r = rhythmOf(state);
   const self = !!(state && state.rhythm && Object.keys(state.rhythm).length);
-  const q = (typeof r.quietFrom === 'number' && typeof r.quietTo === 'number') ? (' · 静默 ' + r.quietFrom + '-' + r.quietTo + ' 时') : '';
-  const vf = (typeof r.valenceFloor === 'number') ? (' · 效价门槛 ' + r.valenceFloor + '（低于它不自主发动）') : ' · 效价门槛未设';
-  return '- 节律(' + (self ? '自我设定' : '出厂默认') + ')：陈旧 ' + r.staleMinutes + 'min · 发动节流 ' + r.fireThrottleMinutes + 'min' + q + vf
-    + (self ? '——**由我自己写下，非出厂常数**（mpm_rhythm 可改，reset 回出厂）' : '（未被改写；mpm_rhythm 可改写自己的节律）');
+  const q = (typeof r.quietFrom === 'number' && typeof r.quietTo === 'number')
+    ? t('rhythm.quiet', { a: r.quietFrom, b: r.quietTo }, locale)
+    : '';
+  const vf = (typeof r.valenceFloor === 'number')
+    ? t('rhythm.floor', { n: r.valenceFloor }, locale)
+    : t('rhythm.floor.none', null, locale);
+  return t('rhythm.line', {
+    src: self ? t('rhythm.self', null, locale) : t('rhythm.factory', null, locale),
+    stale: r.staleMinutes,
+    thr: r.fireThrottleMinutes,
+    q: q,
+    vf: vf,
+    tail: self ? t('rhythm.tail.self', null, locale) : t('rhythm.tail.factory', null, locale)
+  }, locale);
 }
