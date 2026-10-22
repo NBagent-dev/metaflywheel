@@ -83,15 +83,40 @@ export function rotVerdict(curve, minN) {
   if (gap <= -0.15) verdict = 'rot';
   else if (gap >= 0.15) verdict = 'head-effect';
   else verdict = 'flat';
+  // ★P600 修：只比首尾两桶会把**中间的低谷**吞掉（实测：[0-7]20% · [7-14]18.6% · [14-30]**5.3%** ·
+  //   [30-60]22.5% ⇒ 首尾只差 +2.5pp 被judged 'flat'，而真正的结构是中间塌了一格）。
+  //   ⇒ 因此必须再看**全部有效桶**：找出最低桶，与其余桶的中位数比；低过 0.6 倍即视为结构性低谷。
+  const rates = ok.map(function (r) { return r.rate; }).slice().sort(function (a, b) { return a - b; });
+  let trough = null;
+  if (ok.length >= 3) {
+    let minR = ok[0];
+    for (let i = 1; i < ok.length; i++) { if (ok[i].rate < minR.rate) minR = ok[i]; }
+    const others = ok.filter(function (r) { return r !== minR; }).map(function (r) { return r.rate; });
+    others.sort(function (a, b) { return a - b; });
+    const mid = others.length
+      ? (others.length % 2 ? others[(others.length - 1) / 2] : (others[others.length / 2 - 1] + others[others.length / 2]) / 2)
+      : 0;
+    // 只有"最低桶显著低于其余"才算低谷；否则均匀低就是 flat
+    if (mid > 0 && minR.rate < mid * 0.6) {
+      trough = { lo: minR.lo, hi: minR.hi, rate: minR.rate, n: minR.n, mid: Math.round(mid * 1000) / 1000 };
+      if (verdict === 'flat') verdict = 'structured';
+    }
+  }
   const label = verdict === 'rot' ? '老沉积的兑现率明显更低 ⇒ 形如腐坏（但只是截面，见下）'
     : verdict === 'head-effect' ? '老沉积的兑现率反而更高 ⇒ 头部效应，不是腐坏'
+    : verdict === 'structured' ? '首尾接近但**中间有低谷** ⇒ 不是均匀的安静，而是某一年龄段被整段跳过'
     : '各年龄桶兑现率接近 ⇒ 没有腐坏，只是均匀地没被读（安静的库房）';
   const span = '[' + (newest.lo) + '-' + (newest.hi === Infinity ? '∞' : newest.hi) + '天] ' + Math.round(newest.rate * 1000) / 10 + '%'
     + ' vs [' + oldest.lo + '-' + (oldest.hi === Infinity ? '∞' : oldest.hi) + '天] ' + Math.round(oldest.rate * 1000) / 10 + '%'
     + '（差 ' + (gap > 0 ? '+' : '') + Math.round(gap * 1000) / 10 + ' 个百分点）';
+  const troughTxt = trough
+    ? '。低谷 [' + trough.lo + '-' + (trough.hi === Infinity ? '∞' : trough.hi) + '天] '
+      + Math.round(trough.rate * 1000) / 10 + '%（' + trough.n + ' 条）vs 其余中位 '
+      + Math.round(trough.mid * 1000) / 10 + '%'
+    : '';
   return {
-    verdict: verdict, gap: gap, newest: newest, oldest: oldest,
-    line: label + '：' + span
+    verdict: verdict, gap: gap, newest: newest, oldest: oldest, trough: trough,
+    line: label + '：' + span + troughTxt
       + '。★ 这是**截面**：它分不清"旧的被埋"与"旧的当年就没人用"——要分开需要逐月快照，而账本没有这个历史。'
   };
 }
