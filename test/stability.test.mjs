@@ -128,7 +128,8 @@ test('稳定性·非法输入：所有工具在缺参数/错参数下必须返�
   // ★P526：采用——空参=list（只读查询）；add 缺件时由工具自身返回 ok:false，已由 adopt.test.mjs 覆盖。
   const QUERY_TOOLS = ['mpm_flywheel_state', 'mpm_rhythm', 'mpm_unknown', 'mpm_hit', 'mpm_adopt',
     'mpm_weights',
-    'mpm_index'];   // ★P594⑥：空参 = report（只读）；write/verify 由 iterate-batch.test.mjs 与工具自身守
+    'mpm_index',
+    'mpm_rank_eval'];   // ★P596⑤：空参 = run（只读查询）；weights 非法时工具自身返回 ok:false
   const names = host.registered.map((t) => t.name);
   for (const n of WRITE_TOOLS.concat(QUERY_TOOLS)) assert.ok(names.includes(n), '工具缺失：' + n);
   assert.equal(names.length, WRITE_TOOLS.length + QUERY_TOOLS.length,

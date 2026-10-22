@@ -10,6 +10,8 @@ import { phiOf, revisionOf } from "./util.mjs";
 import { SEDIMENT_STATUS, applySupersedes, statusSummary } from "./sediment-status.mjs";
 import { normalizeAgendaWeights, breakdownLine } from "./agenda-weights.mjs";   // ★P593：议程权重外置 + 贡献占比诊断
 import { buildIndex, indexJson, sameIndex, indexLine } from "./sediment-index.mjs";   // ★P594⑥：离线索引（可重建的词面）
+import { evaluateRetrieval, evalLine } from "./rank-eval.mjs";   // ★P596⑤：检索排序的度量（用 adopt 当真值）
+import { normalizeRetrievalWeights } from "./retrieval-weights.mjs";   // ★P594⑤：三项权重
 import { innerAgenda } from "./agenda.mjs";   // ★P593：mpm_weights show 要打印真实议程的占比  // ★P591：沉积的「被取代」（ADR 式）
 import { sedimentCacheGet, retrieveTop } from "./retrieval.mjs";
 import { persistNote } from "./state.mjs";
@@ -1042,6 +1044,32 @@ export function makeTools(deps) {
           return { ok: true, report: '已恢复出厂议程权重（= 原来写死的那四个数）' + (pr2 && pr2.ok ? '（已落盘）' : '（⚠ 落盘未确认）') };
         }
         return { ok: false, report: 'action 只认 show / set / reset，收到「' + act + '」' };
+      }
+    ),
+    mkTool(
+      'mpm_rank_eval',
+      'P596⑤ 的度量（**可复跑**）：用账本里的 adopt 当真值，量化「三项加权是否把该被想起的沉积排上来了」。★真值口径：adopt = 我事后承认用过它，**不是**"引擎当年把它排上来了" ⇒ 测的是"加权是否更接近我判定的有用"，不是召回率。★结论以"多数样本朝哪边变"为准；均值会打印但注明易被离群值拖动。★当前结论：方向不利（改善 4 · 恶化 7）⇒ 三项加权留在站点之外。',
+      { properties: { weights: { type: 'string', description: '可选 JSON：{"relevance":1,"recency":0.3,"importance":0.2}；缺省用默认权重' } } },
+      [],
+      async (args) => {
+        args = args || {};
+        const seds = (d && d.state && Array.isArray(d.state.sediments)) ? d.state.sediments : [];
+        const adopts = (d && d.state && Array.isArray(d.state.adopts)) ? d.state.adopts : [];
+        const samples = adopts.map(function (a) {
+          return { query: String((a && (a.forWhat || a.why)) || ''), targetId: String((a && a.sedimentId) || '') };
+        }).filter(function (s) { return s.targetId; });
+        let W = null;
+        if (args.weights) {
+          try { W = normalizeRetrievalWeights(JSON.parse(String(args.weights))).weights; }
+          catch (e) { return { ok: false, report: 'weights 必须是合法 JSON：' + (e && e.message ? e.message : '未知') }; }
+        }
+        const r = evaluateRetrieval(samples, sedimentCacheGet(seds), W, Date.now());
+        const rows = (r.rows || []).slice(0, 12).map(function (x) {
+          if (x.missing) return '  ' + x.targetId + ' 缺失（不在现役语料里）';
+          return '  ' + String(x.targetId) + '  ' + x.rankRel + ' → ' + x.rankWeighted
+            + '  (' + (x.delta > 0 ? '+' : '') + x.delta + ')';
+        });
+        return { ok: true, report: evalLine(r) + (rows.length ? '\n' + rows.join('\n') : '') };
       }
     ),
     mkTool(
