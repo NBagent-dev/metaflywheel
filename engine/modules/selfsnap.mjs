@@ -3,6 +3,7 @@
 //   state, perception, outsideCalls:number, drift:{active,reason}, BOUNDARY_THRESHOLD:number
 //   retrievalHits:(state)=>[{text}], valenceSummaryLine:()=>string, directiveText:()=>string
 //   isParked:(p)=>boolean, isOpen:(p)=>boolean
+import { t } from "./i18n.mjs";   // ★P621：快照正文走词条（语言可切；数据层不动）
 import { bigrams, relAgo } from "./util.mjs";
 import { isRetired } from "./sediment-status.mjs";   // ★P592：退役的沉积退出记忆栏与陈旧账
 import { sedimentCacheGet, retrieveTop } from "./retrieval.mjs";
@@ -29,10 +30,7 @@ export function renderSelfSnapshot(d) {
   } catch (e) {
     let msg;
     try { msg = String((e && e.message) || e).slice(0, 200); } catch (_) { msg = '(错误信息不可读)'; }
-    return '## 我是谁（MPM 个体大脑 · 自我快照）\n'
-      + '- ⚠ **本轮为降级快照：渲染失败** —— ' + msg + '\n'
-      + '- 引擎仍在记账（题/沉积/代谢都不受影响）；这不是"没有自我"，是"这一份没渲染出来"。'
-      + '请检查 ~/.dsh/mpm/engine/modules/selfsnap.mjs，判据见 test_selfsnap.mjs 的故障注入用例。';
+    return t('snap.degraded', { msg: msg });
   }
 }
 
@@ -41,8 +39,8 @@ function renderSnapshotInner(d) {
   const ids = Object.keys(state.problems);
   if (!ids.length && !state.sediments.length) return '';
   const lines = [];
-  lines.push('## 我是谁（MPM 个体大脑 · 自我快照）');
-  lines.push('个体=认知飞轮；LLM=本次被咨询的群体超脑（无状态）。以下由引擎在每次提示组装时实时生成，是个体在咨询前写下的自我。');
+  lines.push(t('snap.title'));
+  lines.push(t('snap.intro'));
   // P332/P171：运行期自陈。**放在最前面**，因为它是关于"我这个正在说话的个体究竟是什么"的事实。
   // 陈旧时必须显眼——P171（2026-09-13）已经写出正确判据（问端口属主与进程启动时间，别问版本号），
   // 但 09-28 需要它的那一刻它没到场，于是原封不动重演了一遍。
@@ -188,8 +186,8 @@ function renderSnapshotInner(d) {
   // 孤儿=磁盘上有而我不记得；幽灵=我记得而磁盘上没有。两者都是"我以为我有"的裂缝。
   if (state.measure && state.measure.reconcile
       && (((state.measure.reconcile.orphans || []).length) || ((state.measure.reconcile.ghosts || []).length))) {
-    lines.push('- ⚠ 账本对账(P487)：孤儿沉积文件 ' + (state.measure.reconcile.orphans || []).length + ' 个 · 幽灵索引项 '
-      + (state.measure.reconcile.ghosts || []).length + ' 个——.md 与索引不一致，详见 measure.reconcile（孤儿=磁盘上有而我不记得；幽灵=我记得而磁盘上没有）。');
+    lines.push(t('snap.reconHead') + (state.measure.reconcile.orphans || []).length + t('snap.reconMid')
+      + (state.measure.reconcile.ghosts || []).length + t('snap.reconEnd'));
   }
   if (state.constitution && state.constitution.autonomy) {
     lines.push('- 执政：构成性开启（三者的结合即是一）· 发动记录 ' + state.constitution.log.length + ' 条 · 瞬时审议已启用（θ_G 即时/代谢随巡检）· 宪法修正权 mpm_grant revoke。');
@@ -232,16 +230,16 @@ function renderSnapshotInner(d) {
   // ★P482⑨ 最后一米：**履行与无视必须可比**——否则"没做"在账本里看不见
   const ps = state.measure && state.measure.promiseStats;
   if (ps) {
-    lines.push('- 承诺履行(P482⑨·最后一米)：已叫醒 ' + (ps.woken || 0) + ' · 已履行 ' + (ps.honoredTotal || 0)
-      + ' · 逾期 ' + (ps.overdueTotal || 0) + '——逾期不是系统在催，是**我自己写下的承诺没兑现**');
+    lines.push(t('snap.keptHead') + (ps.woken || 0) + t('snap.keptMid') + (ps.honoredTotal || 0)
+      + t('snap.keptMid2') + (ps.overdueTotal || 0) + t('snap.keptEnd'));
   }
   // ★P482⑧：行动前检索的可见性——**看不到命中数，就不知道它到底有没有在工作**
   if (state.preAction) {
     const pa = state.preAction;
-    lines.push('- 行动前检索(P482⑧·来自我自己的历史)：' + (pa.off ? '已停用' : '启用')
-      + ' · 命中 提示' + (pa.hint || 0) + '/问' + (pa.ask || 0) + '/拦' + (pa.deny || 0)
-      + (pa.injectFail ? ' · ⚠注入失败' + pa.injectFail : '')
-      + (pa.failOpen ? ' · ⚠fail-open' + pa.failOpen : ''));
+    lines.push(t('snap.preActHead') + (pa.off ? t('snap.off') : t('snap.on'))
+      + t('snap.preActMid') + (pa.hint || 0) + t('snap.preActAsk') + (pa.ask || 0) + t('snap.preActDeny') + (pa.deny || 0)
+      + (pa.injectFail ? t('snap.preActInjectFail') + pa.injectFail : '')
+      + (pa.failOpen ? t('snap.preActFailOpen') + pa.failOpen : ''));
   }
   // ★P019/M14 级判据（用户 2026-10-11 定为项目目标）：**能自己决定，就必须能被看见地决定。**
   //   这一行是"我的自我决定"的审计面：①哪些是我设的、哪些还是出厂默认 ②我改了什么
@@ -257,12 +255,12 @@ function renderSnapshotInner(d) {
       const ex = String((q.parked && q.parked.awakenWhen) || '').trim();
       if (/^(after|cites|epsilon|exists|user)\s*[:：]/i.test(ex)) mech += 1;
     }
-    lines.push('- 自我决定(P019/M14级判据·**能自己决定就必须能被看见地决定**)：'
-      + '节律' + (selfRhythm ? '**自我设定**' : '出厂默认')
-      + '(' + rh2.staleMinutes + 'min' + (typeof rh2.quietFrom === 'number' ? '/静默' + rh2.quietFrom + '-' + rh2.quietTo : '/不静默') + ')'
-      + ' · 可机械求值的承诺 ' + mech + ' 条'
-      + ' · 行动前检索' + (state.preAction && state.preAction.off ? '**已停用**' : '启用')
-      + ' · 否决路径：mpm_rhythm reset / 重命名 .mpm/preaction.rules.json / mpm_grant revoke');
+    lines.push(t('snap.selfDetHead')
+      + t('snap.rhythmWord') + (selfRhythm ? t('snap.selfSet') : t('snap.factory'))
+      + '(' + rh2.staleMinutes + 'min' + (typeof rh2.quietFrom === 'number' ? t('snap.quietPre') + rh2.quietFrom + '-' + rh2.quietTo : t('snap.quietNone')) + ')'
+      + t('snap.mechPre') + mech + t('snap.items')
+      + t('snap.preActWord') + (state.preAction && state.preAction.off ? t('snap.offBold') : t('snap.on'))
+      + t('snap.vetoPath'));
   }
   // ★P517：委托人的思考方式（**一条都没录入 ⇒ 整行不显示**——负控：不许凭空说"你说过"）。
   { const pl = principalLine(state); if (pl) lines.push(pl); }

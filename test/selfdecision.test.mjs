@@ -13,6 +13,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { renderSelfSnapshot } from '../engine/modules/selfsnap.mjs';
+import { t } from '../engine/modules/i18n.mjs';
 
 const SRC = fs.readFileSync(new URL('../engine/modules/selfsnap.mjs', import.meta.url), 'utf8');
 
@@ -38,9 +39,16 @@ function render(stateExtra, problems) {
 }
 const lineOf = (txt) => txt.split('\n').find((l) => l.indexOf('自我决定(') >= 0) || '';
 
-test('判据源存在：selfsnap 里必须有这一行（删掉它 ⇒ 本判据红）', () => {
-  assert.ok(SRC.indexOf('- 自我决定(P019/M14级判据') >= 0,
-    '快照里没有"自我决定"审计面——那这条目标就只是嘴上说的');
+// ★P621 修：这条判据原来锚在 selfsnap.mjs 的**字面量**上。P621 把那行文字搬进 i18n 词条后，
+//   判据随之变红——但它红的原因是"字被搬走了"，不是"审计面消失了"。
+//   **一个锚在字面量上的判据，字面量一搬家它就停止守卫。** 所以改锚到"两处都在"：
+//   渲染器必须引用那个词条 key，词条里必须有那句审计面文案。任一处丢了都会红。
+test('判据源存在：渲染器必须引用 snap.selfDetHead，且词条里必须有这句审计面', () => {
+  assert.ok(SRC.indexOf("t('snap.selfDetHead')") >= 0,
+    '渲染器不再引用 snap.selfDetHead —— 快照里没有"自我决定"审计面，那这条目标就只是嘴上说的');
+  const zh = t('snap.selfDetHead', {}, 'zh');
+  assert.ok(zh.indexOf('自我决定(') >= 0, '词条 snap.selfDetHead 丢了"自我决定("这半句：' + zh);
+  assert.ok(zh.indexOf('能自己决定就必须能被看见地决定') >= 0, '词条丢了那句目标本身：' + zh);
 });
 
 test('①未改写任何东西 ⇒ 必须显示"出厂默认"（不许把默认冒充成我的决定）', () => {
