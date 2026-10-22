@@ -3,6 +3,7 @@
 // P079 修复：P073 改签名后 problem-corpus 分支 4 参错位静默失效 —— 此处恢复为显式双通道。
 import { bigrams } from "./util.mjs";
 import { isRetired } from "./sediment-status.mjs";   // ★P592：退役沉积不参与检索
+import { enrichTerms } from "./sediment-enrich.mjs";   // ★P594④：检索面 = 标题+标签+富化词（不改原文）
 
 export const RETRIEVE_TOP_N = 2;
 export const RETRIEVE_MIN_SCORE = 0.35; // 与 M9③ 因材施教同阈值（v0）
@@ -13,8 +14,20 @@ export function sedimentCacheGet(sediments) {
   // ★P592：缓存 key 必须覆盖**过滤输入** —— 只按"长度+末条 id"会漏掉「某条被标记退役」这种变化
   //   （P539 同族：key 少一个维度 ⇒ 状态改了、缓存仍说没改）
   let retiredN = 0;
+  // ★P594④：key 还必须覆盖**富化** —— 否则"给沉积补了别名"之后缓存仍返回旧词面，
+  //   于是富化在检索里看起来没有发生（与 P592 的 retiredN 同一族：key 少一个维度）。
+  let enrichedN = 0, keywordN = 0;
+  for (let i0 = 0; i0 < sediments.length; i0++) {
+    const s0 = sediments[i0];
+    const e0 = s0 && s0.enriched;
+    if (e0 && typeof e0 === 'object') {
+      enrichedN += 1;
+      keywordN += (Array.isArray(e0.keywords) ? e0.keywords.length : 0)
+                + (Array.isArray(e0.aliases) ? e0.aliases.length : 0);
+    }
+  }
   for (let i0 = 0; i0 < sediments.length; i0++) if (isRetired(sediments[i0])) retiredN += 1;
-  const key = sediments.length + ':' + (sediments.length ? sediments[sediments.length - 1].id : '') + ':' + retiredN;
+  const key = sediments.length + ':' + (sediments.length ? sediments[sediments.length - 1].id : '') + ':' + retiredN + ':' + enrichedN + ':' + keywordN;
   if (sedCorpusCache.key === key) return sedCorpusCache;
   const items = [];
   const seenT = {}, seenR = {};
@@ -23,7 +36,7 @@ export function sedimentCacheGet(sediments) {
     const s = sediments[i];
     if (isRetired(s)) continue;   // ★P592：退休 ≠ 删除——只是不进检索，仍可按 ID 查到
     const titleSet = bigrams(s.title);
-    const retSet = bigrams(s.title + ' ' + (s.tags || []).join(' '));
+    const retSet = bigrams(enrichTerms(s));   // ★P594④：吃富化词，否则
     items.push({ ref: s, titleSet: titleSet, retSet: retSet });
     for (const g of titleSet) if (!seenT[g]) { seenT[g] = true; dfTitle[g] = (dfTitle[g] || 0) + 1; }
     for (const g of retSet) if (!seenR[g]) { seenR[g] = true; dfRet[g] = (dfRet[g] || 0) + 1; }

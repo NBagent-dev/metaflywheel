@@ -245,10 +245,10 @@ node --test test/agenda.test.mjs   # 单个文件
 |---|---|---|
 | 1 | 沉积 `status`（ADR 式被取代） | **已完成**（P591 数据层 + 工具；P592 注入/检索过滤 + 缓存 key） |
 | 2 | agenda 权重外置 + 贡献占比诊断 | **已完成（P593）**：`mpm_weights` show/set/reset + 单项 ≥60% 报警 |
-| 3 | `events.jsonl` 增量日志 | 待做 |
-| 4 | `enriched` 侧车（关键词/别名） | 待做 |
-| 5 | 检索三项加权（相关/新近/重要） | 待做 |
-| 6 | 巡检期离线索引 | 待做 |
+| 3 | `events.jsonl` 增量日志 | **模块已就绪（P594③）**：`events-log.mjs` + 4 条判据；**尚未接入 persist 写路径**（有意：写路径盲改风险高，下一步单独做） |
+| 4 | `enriched` 侧车（关键词/别名） | **已完成（P594④）**：`sediment-enrich.mjs` + 已进 `retrieval` 词面；缓存 key 已覆盖富化；端到端判据通过 |
+| 5 | 检索三项加权（相关/新近/重要） | **模块已就绪（P594⑤）**：`retrieval-weights.mjs` + 判据（含"置 0 必变序"负控）；**尚未用于 live 排序** |
+| 6 | 巡检期离线索引 | **已完成（P594⑥）**：`sediment-index.mjs` + 工具 `mpm_index`（report/write/verify，确定性可验） |
 
 ---
 

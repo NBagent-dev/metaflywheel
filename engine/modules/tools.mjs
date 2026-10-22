@@ -9,6 +9,7 @@ import { defineTool } from "@deepseek-ai/dsh-tools";
 import { phiOf, revisionOf } from "./util.mjs";
 import { SEDIMENT_STATUS, applySupersedes, statusSummary } from "./sediment-status.mjs";
 import { normalizeAgendaWeights, breakdownLine } from "./agenda-weights.mjs";   // ★P593：议程权重外置 + 贡献占比诊断
+import { buildIndex, indexJson, sameIndex, indexLine } from "./sediment-index.mjs";   // ★P594⑥：离线索引（可重建的词面）
 import { innerAgenda } from "./agenda.mjs";   // ★P593：mpm_weights show 要打印真实议程的占比  // ★P591：沉积的「被取代」（ADR 式）
 import { sedimentCacheGet, retrieveTop } from "./retrieval.mjs";
 import { persistNote } from "./state.mjs";
@@ -1041,6 +1042,45 @@ export function makeTools(deps) {
           return { ok: true, report: '已恢复出厂议程权重（= 原来写死的那四个数）' + (pr2 && pr2.ok ? '（已落盘）' : '（⚠ 落盘未确认）') };
         }
         return { ok: false, report: 'action 只认 show / set / reset，收到「' + act + '」' };
+      }
+    ),
+    mkTool(
+      'mpm_index',
+      'P594⑥ 离线索引（"睡眠期整合" v0）：把沉积重整成**可重建的词面索引**。action=report（默认，只算不写）/ write（写 .mpm/index/sediments.json）/ verify（重建并与磁盘比对字节）。★纯词面，未抽实体：实体抽取要 LLM 或词典，两者都会引入不可判定错误；词面索引可重建、可 diff、零外部依赖。★确定性是硬要求：同输入必须同字节，否则"可重建"无法被验证。',
+      { properties: { action: { type: 'string', description: 'report(默认) | write | verify' } } },
+      [],
+      async (args) => {
+        args = args || {};
+        const act = String(args.action || 'report').trim();
+        const list = (d && d.state && Array.isArray(d.state.sediments)) ? d.state.sediments : [];
+        const idx = buildIndex(list);
+        const body = indexJson(idx);
+        const det = sameIndex(buildIndex(list), idx) ? '同输入同字节 ✓' : '✗ 不确定！';
+        const rel = '.mpm/index/sediments.json';
+        const canFs = !!(d && d.fsSvc && d.root && d.root.current);
+        if (act === 'report' || act === '') {
+          return { ok: true, report: indexLine(idx) + '\n确定性：' + det + '\n（未写盘；action=write 才落盘）' };
+        }
+        if (act === 'write') {
+          if (!canFs) return { ok: false, report: '没有可用的文件服务或沉积根，未写盘（不假装成功）' };
+          try {
+            const target = await d.fsSvc.resolve(d.root.current + '/' + rel);
+            await d.fsSvc.writeText(target, body);
+            return { ok: true, report: '已写入 ' + rel + '（' + body.length + ' 字节）\n' + indexLine(idx) };
+          } catch (e) {
+            return { ok: false, report: '写盘失败：' + (e && e.message ? e.message : '未知') };
+          }
+        }
+        if (act === 'verify') {
+          if (!canFs) return { ok: false, report: '没有可用的文件服务，无法比对' };
+          if (typeof d.fsSvc.readText !== 'function') return { ok: false, report: '文件服务没有 readText，无法比对（不假装通过）' };
+          let prev = null;
+          try { prev = await d.fsSvc.readText(await d.fsSvc.resolve(d.root.current + '/' + rel)); }
+          catch (e) { return { ok: false, report: '磁盘上没有索引文件（先 action=write）' }; }
+          const same = String(prev) === body;
+          return { ok: same, report: (same ? '可重建 ✓ 字节一致' : '✗ 字节不一致：索引已过期或存在非确定性来源') + '\n' + indexLine(idx) };
+        }
+        return { ok: false, report: 'action 只认 report / write / verify，收到「' + act + '」' };
       }
     ),
     mkTool(
