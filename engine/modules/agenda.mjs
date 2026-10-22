@@ -22,6 +22,7 @@ export const AGENDA_MAX = 3;            // 一次最多提几条（有界，防�
 // ★P523：hit-repeat 的区分器要用【欠账】的唯一定义（单一真源在 hits.mjs）——
 //   绝不在这里再写一遍"什么算欠账"，否则两处同义代码会各自漂移（P507 的教训）。
 import { outstandingHits } from './hits.mjs';
+import { t as tr } from "./i18n.mjs";   // ★P626：本模块已有局部变量 t，故用别名
 import { weightOf, normalizeAgendaWeights } from './agenda-weights.mjs';   // ★P593：权重外置（不调=行为不变）
 export const HIT_REPEAT_MIN = 3;        // 同一 key 被命中 ≥3 次 ⇒ 值得看一眼
 export const STALE_DEPOSIT_DAYS = 14;   // 沉积 ≥14 天且零引用 ⇒ 提醒（与 M9② 降权同口径）
@@ -47,8 +48,8 @@ export function innerAgenda(state, now) {
     out.push({
       kind: 'unknown', level: LEVEL, ref: String(u.id || ('U@' + u.at)),
       key: String(u.key || ''),
-      text: '你标注过没验：' + String(u.text || ''),
-      because: '退役条件：' + String(u.until || '（未写）'),
+      text: tr('ag.1') + String(u.text || ''),
+      because: tr('ag.2') + String(u.until || tr('ag.3')),
       weight: weightOf('unknown', 1, W)
     });
   }
@@ -79,8 +80,8 @@ export function innerAgenda(state, now) {
     if (!owed[k]) continue;                              // ★★负控：全已处置且无 stillOpen ⇒ 不产出
     out.push({
       kind: 'hit-repeat', level: LEVEL, ref: 'hits:' + k, key: k,
-      text: '同一件事被提醒了 ' + total[k] + ' 次：「' + k + '」，其中 **' + owed[k] + ' 次仍未解决**',
-      because: '其中 ' + owed[k] + ' 次是【未处置】或处置时明确标了"仍未解决"（账本里可核对，不是推测）',
+      text: tr('ag.4') + total[k] + tr('ag.5') + k + tr('ag.6') + owed[k] + tr('ag.7'),
+      because: tr('ag.8') + owed[k] + tr('ag.9'),
       weight: weightOf('hit-repeat', owed[k], W)
     });
   }
@@ -118,17 +119,17 @@ export function innerAgenda(state, now) {
     out.push({
       kind: 'hit-open', level: LEVEL, ref: 'hits:open', key: keys[0] || '',
       text: (nObj === nRec)
-        ? ('有 ' + nObj + ' 笔命中还没清账：'
+        ? (tr('ag.10') + nObj + tr('ag.11')
            + keys.slice(0, 3).map(function (k) { return '「' + k + '」'; }).join(' · ')
-           + (keys.length > 3 ? ' 等 ' + keys.length + ' 个对象' : ''))
-        : ('有 ' + nObj + ' 个对象还没清账（共 ' + nRec + ' 条记录）：'
+           + (keys.length > 3 ? tr('ag.12') + keys.length + tr('ag.13') : ''))
+        : (tr('ag.10') + nObj + tr('ag.14') + nRec + tr('ag.15')
            + keys.slice(0, 3).map(function (k) {
              return '「' + k + '」×' + perKey[k];
            }).join(' · ')
-           + (keys.length > 3 ? ' 等 ' + keys.length + ' 个对象' : '')),
-      because: '**未处置是我欠的账**——命中了却没说清怎么处置，等于没被约束过'
-        + '（用 `mpm_hit action=dispose` 留痕；处置了但它仍挂着 ⇒ 传 `stillOpen: true`，'
-        + '而它会带一个**承诺复查期**（缺省 14 天）——到期后不再计入欠账，但记录仍在）',
+           + (keys.length > 3 ? tr('ag.12') + keys.length + tr('ag.13') : '')),
+      because: tr('ag.16')
+        + tr('ag.17')
+        + tr('ag.18'),
       weight: weightOf('hit-open', nObj, W)
     });
   }
@@ -150,8 +151,8 @@ export function innerAgenda(state, now) {
     out.push({
       kind: 'sediment-stale', level: LEVEL, ref: String(s.id || ''),
       key: String(s.id || ''),
-      text: '沉积 ' + String(s.id || '') + ' 已 ' + Math.floor((t - at) / day()) + ' 天零引用',
-      because: '零引用的沉积可能是"写得漂亮但没用"，也可能是"该用的时候没人想起来"——两种都值得查',
+      text: tr('ag.19') + String(s.id || '') + tr('ag.20') + Math.floor((t - at) / day()) + tr('ag.21'),
+      because: tr('ag.22'),
       weight: weightOf('sediment-stale', 1, W)
     });
   }
@@ -162,8 +163,8 @@ export function innerAgenda(state, now) {
 
 /** 分级自陈（约束①：不许冒充"想要"）。渲染与工具报告都必须带上它。 */
 export function levelNote() {
-  return '**级别：L2 内生议程（规则触发）**——触发源是"我自己的账本状态"，不是"我想要"（L3）。'
-    + '**不许把 L2 说成 L3。**';
+  return tr('ag.23')
+    + tr('ag.24');
 }
 
 /** 快照/报告里那一段。**没有议题 ⇒ 空串**（负控：不许凭空说"我有议程"）。 */
@@ -171,8 +172,8 @@ export function agendaLine(state, now) {
   const items = innerAgenda(state, now);
   if (!items.length) return '';
   const body = items.map(function (i) {
-    return '「' + i.text.slice(0, 40) + '」(出处 ' + i.ref + '：' + i.because.slice(0, 44) + ')';
+    return '「' + i.text.slice(0, 40) + tr('ag.25') + i.ref + '：' + i.because.slice(0, 44) + ')';
   });
-  return '- 内生议程(P521·**账本替我说该做什么**)：' + items.length + ' 条 · ' + body.join(' · ')
+  return tr('ag.26') + items.length + tr('ag.27') + body.join(' · ')
     + '——' + levelNote();
 }
