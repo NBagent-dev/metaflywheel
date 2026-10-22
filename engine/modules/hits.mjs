@@ -10,6 +10,9 @@
 //
 // ★这一条与 P482⑨「承诺的最后一米」同构：写下→叫醒→履行→清账 四段，缺的是**清账**。
 //   所以本模块的核心判据不是"记了没有"，而是：**未处置必须可见**。
+
+// ★P603：渲染层走 t()，数据层（key/text/myAction）**一个字都不翻**。
+import { t } from './i18n.mjs';
 //   否则回流只是台账装饰——"我没违反"永远无法被检验。
 //
 // 边界：只记**事实**（哪条命中、什么判决、我如何处置），不记辩护。
@@ -245,7 +248,7 @@ export function isLedgerTool(name) {
  * 快照那一行。**没有命中记录 ⇒ 空串**（负控：不许凭空说"命中过"）。
  * ★关键：**未处置数必须显示出来**——这就是"对源负责"的可见面。
  */
-export function hitsLine(state, limit) {
+export function hitsLine(state, limit, locale) {
   const all = (state && Array.isArray(state.hits)) ? state.hits : [];
   if (!all.length) return '';
   const open = openHits(all);
@@ -255,19 +258,24 @@ export function hitsLine(state, limit) {
   //   注意顺序：这里必须在下面 return 之前声明（曾因 TDZ 让整行渲染崩掉过一次）。
   const dirs = directionHits(all);
   const dirTxt = dirs.length
-    ? ' · **方向 ' + dirs.length + ' 条（不参与欠账，仍可按 ID 查到）**：' + dirs.slice(-3).map(function (e) {
-      return '「' + String(e.text || e.key).slice(0, 26) + '」(' + e.key + ')';
+    ? t('hits.dirs', { n: dirs.length }, locale) + dirs.slice(-3).map(function (e) {
+      return t('hits.dirsItem', { text: String(e.text || e.key).slice(0, 26), key: e.key }, locale);
     }).join(' · ')
     : '';
   const recent = all.slice(-n).map(function (e) {
-    const mark = !e.disposedAt ? '**未处置**' : (e.stillOpen === true ? '**处置了但仍未解决**' : '已处置');
-    return '「' + String(e.text || e.key).slice(0, 30) + '」(' + e.key + '·' + e.verdict + '·' + mark + ')';
+    const mark = !e.disposedAt
+      ? t('hits.mark.open', null, locale)
+      : (e.stillOpen === true ? t('hits.mark.still', null, locale) : t('hits.mark.done', null, locale));
+    return t('hits.item', {
+      text: String(e.text || e.key).slice(0, 30),
+      key: e.key,
+      verdict: e.verdict,
+      mark: mark
+    }, locale);
   });
-  return '- 命中回流(P519·**源→行为→记录→源**)：命中 ' + all.length + ' 次 · **未处置 ' + open.length + ' 次**'
-    + (stillN ? ' · **处置了但仍未解决 ' + stillN + ' 次**' : '')
+  return t('hits.head', { total: all.length, open: open.length }, locale)
+    + (stillN ? t('hits.still', { n: stillN }, locale) : '')
     + dirTxt
-    + (recent.length ? '：' + recent.join(' · ') : '')
-    + (open.length
-      ? '——**未处置是我欠的账**：命中了却没说清怎么处置，等于没被约束过（用 `mpm_hit action=dispose` 留痕）。'
-      : '——全部已处置（每次命中都留下了"我如何处置"）。');
+    + (recent.length ? t('hits.recent', { items: recent.join(' · ') }, locale) : '')
+    + (open.length ? t('hits.foot.owed', null, locale) : t('hits.foot.done', null, locale));
 }
