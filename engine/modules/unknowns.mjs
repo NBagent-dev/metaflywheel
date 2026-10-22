@@ -1,3 +1,4 @@
+import { t as tr } from "./i18n.mjs";   // ★P627：渲染面走词条（别名避开局部变量 t）
 // P517③ **未核清单**：让"我不知道的东西"也跨代活着。
 //
 // 与 principal 正好配成一对：
@@ -100,9 +101,9 @@ export function consultUnknowns(list, subject) {
   return {
     hits: hits,
     verdict: 'hint',   // ★永不 ask/deny
-    why: '未核清单(P517③·命中 ' + hits.length + ' 条)：'
-      + hits.slice(0, 3).map(function (e) { return '「' + String(e.text).slice(0, 40) + '」(退役条件：' + String(e.until).slice(0, 30) + ')'; }).join(' · ')
-      + '——**这些是我自己标注过"没验"的**，动手前先想起它们。'
+    why: tr('un.1') + hits.length + tr('un.2')
+      + hits.slice(0, 3).map(function (e) { return '「' + String(e.text).slice(0, 40) + tr('un.3') + String(e.until).slice(0, 30) + ')'; }).join(' · ')
+      + tr('un.4')
   };
 }
 
@@ -114,7 +115,7 @@ export function unknownLine(state, limit) {
   const done = all.length - open.length;
   const n = (typeof limit === 'number' && limit > 0) ? limit : 3;
   const recent = open.slice(-n).map(function (e) { return '「' + String(e.text).slice(0, 36) + '」(' + e.key + ')'; });
-  return '- 未核清单(P517③·**我知道自己没验的东西，也要跨代活着**)：未核 ' + open.length + ' 条 · 已核销 ' + done + ' 条'
+  return tr('un.5') + open.length + tr('un.6') + done + tr('un.7')
     + (recent.length ? '：' + recent.join(' · ') : '')
-    + '——**这些是"未核"不是"没问题"**；动手前先检索，核销时必须带证据（`mpm_unknown action=resolve`）。';
+    + tr('un.8');
 }

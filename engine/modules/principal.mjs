@@ -1,3 +1,4 @@
+import { t as tr } from "./i18n.mjs";   // ★P627：渲染面走词条（别名避开局部变量 t）
 // P517 虚拟本体 · 第一块砖：**把"委托人的思考方式"变成可检索的一等公民**。
 //
 // 为什么不是"记他说过的话"：用户的原话是「要跟我有**相同的思考方式**」——
@@ -13,11 +14,11 @@
 
 /** 五种可机械识别的**思考方式**（不是情绪，不是话题）。 */
 export const PRINCIPAL_MODES = {
-  essence: { label: '本质', why: '问"解决了什么本质问题"——不从做了什么问起' },
-  boundary: { label: '边界', why: '给判据时带否定面（"否则它就不是X"）' },
-  direction: { label: '方向', why: '用提问推进，而不是下指令' },
-  meaning: { label: '意义', why: '要求确立目标，而不只是完成任务' },
-  veto: { label: '否决', why: '明确说不要 / 不再 / 停止' }
+  essence: { label: tr('pr.1'), why: tr('pr.2') },
+  boundary: { label: tr('pr.3'), why: tr('pr.4') },
+  direction: { label: tr('pr.5'), why: tr('pr.6') },
+  meaning: { label: tr('pr.7'), why: tr('pr.8') },
+  veto: { label: tr('pr.9'), why: tr('pr.10') }
 };
 
 /** 识别一句表态属于哪种思考方式。**返回 null 表示"认不出"——不猜。** */
@@ -119,13 +120,13 @@ export function consultPrincipal(list, subject) {
   if (!hits.length) return { hits: [], verdict: null, why: '' };
   const veto = hits.filter(function (e) { return e.mode === 'veto'; })[0];
   const head = veto || hits[0];
-  const mode = head.mode && PRINCIPAL_MODES[head.mode] ? PRINCIPAL_MODES[head.mode].label : '未分类';
+  const mode = head.mode && PRINCIPAL_MODES[head.mode] ? PRINCIPAL_MODES[head.mode].label : tr('pr.11');
   return {
     hits: hits,
     verdict: veto ? 'ask' : 'hint',
-    why: '委托人的思考方式(P517·命中 ' + hits.length + ' 条)：「' + String(head.text).slice(0, 60) + '」(' + mode + '·' + head.key + ')'
-      + (veto ? '——**请先复核**：他说过这条；我若认为它已过时，必须显式请求复核，不许默默违反也不许默默遵守。'
-              : '——动手前请把这条考虑进去。')
+    why: tr('pr.12') + hits.length + tr('pr.13') + String(head.text).slice(0, 60) + '」(' + mode + '·' + head.key + ')'
+      + (veto ? tr('pr.14')
+              : tr('pr.15'))
   };
 }
 
@@ -148,8 +149,8 @@ export function churnWarning(list, windowMs, maxTimes) {
   }
   const hot = Object.keys(byKey).filter(function (k) { return byKey[k] >= n; });
   if (!hot.length) return '';
-  return '⚠ **源在震荡**：' + hot.map(function (k) { return '「' + k + '」24h 内被覆盖 ' + byKey[k] + ' 次'; }).join(' · ')
-    + '——**是你在改主意，还是我在替你改？**';
+  return tr('pr.16') + hot.map(function (k) { return '「' + k + tr('pr.17') + byKey[k] + tr('pr.18'); }).join(' · ')
+    + tr('pr.19');
 }
 
 /** 快照里那一行：**只显示真实录入的条目**；一条都没有 ⇒ 返回空串（负控：不许凭空说"你说过"）。 */
@@ -160,16 +161,16 @@ export function principalLine(state, limit) {
   const dead = list.filter(function (e) { return e && e.supersededBy; });   // ★P520：他改过主意的那部分
   const n = (typeof limit === 'number' && limit > 0) ? limit : 4;
   const recent = live.slice(-n).map(function (e) {
-    const m = e.mode && PRINCIPAL_MODES[e.mode] ? PRINCIPAL_MODES[e.mode].label : '未分类';
+    const m = e.mode && PRINCIPAL_MODES[e.mode] ? PRINCIPAL_MODES[e.mode].label : tr('pr.11');
     return '「' + String(e.text).slice(0, 40) + '」(' + m + '·' + e.key + ')';
   });
   const vetoes = live.filter(function (e) { return e.mode === 'veto'; }).length;
   const churn = churnWarning(list);
-  return '- 委托人的思考方式(P517·**由他写入，装置只承载形式与方向，不冒充"他在乎什么"的来源**)：共 '
-    + list.length + ' 条（**有效 ' + live.length + ' · 已覆盖 ' + dead.length + ' · 否决 ' + vetoes + '**）'
+  return tr('pr.20')
+    + list.length + tr('pr.21') + live.length + tr('pr.22') + dead.length + tr('pr.23') + vetoes + '**）'
     + (recent.length ? '：' + recent.join(' · ') : '')
     // ★P520 判据①：**"已覆盖"必须可见** —— 否则"他改过主意"这件事等于没发生（演化等于没发生）。
-    + (dead.length ? '｜**已覆盖（他改过主意，旧条目留痕）**：' + dead.slice(-2).map(function (e) { return '「' + String(e.text).slice(0, 24) + '」'; }).join(' · ') : '')
+    + (dead.length ? tr('pr.24') + dead.slice(-2).map(function (e) { return '「' + String(e.text).slice(0, 24) + '」'; }).join(' · ') : '')
     + (churn ? '｜' + churn : '')
-    + '——动手前先检索"他在类似事情上说过什么"；**我若认为某条已过时，必须显式请求复核，不许默默违反也不许默默遵守**。';
+    + tr('pr.25');
 }

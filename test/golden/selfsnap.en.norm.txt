@@ -5,7 +5,7 @@ Individual = the cognitive flywheel; the LLM = the stateless collective super-br
 - Memory (cognitive remains; full text under the sediment root .mpm/deposits/, read on demand; citation count = fulfilments, M#②)  — a further # retired (superseded / refuted), not injected, still reachable by ID:
   ◆ [most-cited] M# DEP-ONE (cited #)
 - Recent narration (T#/T#, written for the next me):
-  · #天前"narration line" (then R=+# · S=#)
+  · # d ago"narration line" (then R=+# · S=#)
 - Retrieval cerebellum (P#-D): retrieval-a.
 - Perception: user present (last activity # min ago · # messages total · # session starts) | off-ledger count #
 - valence-line
@@ -18,7 +18,7 @@ Individual = the cognitive flywheel; the LLM = the stateless collective super-br
 - Promise fulfilment (P#⑨ · last mile): woken # · honoured # · overdue # — overdue is not the system nagging; it is **a promise I wrote and did not keep**
 - Pre-action lookup (P#⑧ · from its own history): enabled · hits: hint #/ask #/deny #
 - Self-determination (P#/M# criterion · **if it can decide for itself, that decision must be visibly made**): rhythm **self-set**(#min/quiet #-#) · mechanically evaluable promises: # · pre-action lookup enabled · veto paths: mpm_rhythm reset / rename .mpm/preaction.rules.json / mpm_grant revoke
-- 内生议程(P#·**账本替我说该做什么**)：# 条 · 「沉积 M# 已 # 天零引用」(出处 M#：零引用的沉积可能是"写得漂亮但没用"，也可能是"该用的时候没人想起来"——两种都值得查)——**级别：L# 内生议程（规则触发）**——触发源是"我自己的账本状态"，不是"我想要"（L#）。**不许把 L# 说成 L#。**
+- Endogenous agenda (P# · **the ledger says what to do next**): # item(s) · 「deposit M# has been # days with zero ci」 (source: M#：a zero-citation deposit may be "well written)——**level: L# endogenous agenda (rule-triggered)** — the trigger is "my own ledger state", not "what I want" (L#).**never call an L# an L#.**
 - awareness proxies: degraded none · static A# (# days without narration) · measurable #/# (A#/A#: no data source or no field - not a failure).
 - Rhythm (self-set): stale #min · fire throttle #min · quiet #-#h · valence floor: not set - **written by me, not a factory constant** (mpm_rhythm can change it; reset restores the factory values)
 - Instruction: directive-x

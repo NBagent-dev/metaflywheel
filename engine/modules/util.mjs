@@ -1,3 +1,4 @@
+import { t } from "./i18n.mjs";   // ★P628：relAgo 走词条
 // MetaFlywheel 纯工具/常量模块（P079 重构第 1 步：从 apply 闭包抽出无状态部分）
 // 无上下文字段依赖，可独立测试；供 engine/host.js 与后续模块复用。
 export const STAGE_NAMES = { G: '生成', F: '界定', S: '求解', C: '收敛', D: '沉积', E: '激发' };
@@ -36,8 +37,8 @@ export function revisionOf(a, b) {
 
 export function relAgo(ts) {
   const d = Date.now() - (ts || 0);
-  if (d < 45e3) return '刚刚';
-  if (d < 36e5) return Math.max(1, Math.round(d / 6e4)) + '分钟前';
-  if (d < 864e5) return Math.round(d / 36e5) + '小时前';
-  return Math.round(d / 864e5) + '天前';
+  if (d < 45e3) return t('relago.now');
+  if (d < 36e5) return t('relago.min', { n: Math.max(1, Math.round(d / 6e4)) });
+  if (d < 864e5) return t('relago.hour', { n: Math.round(d / 36e5) });
+  return t('relago.day', { n: Math.round(d / 864e5) });
 }

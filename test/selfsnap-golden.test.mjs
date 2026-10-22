@@ -97,7 +97,7 @@ test('① 中文快照与金标逐字一致（数字已归一化）', () => {
 // ★P624 已知缺口（显式 todo，不是静默通过）：快照的**行内容**有六个模块自己拼中文：
 //   agenda / awareness / principal / unknowns / hits / adopt。
 //   本条 todo 一旦转正，就说明那六个模块都已词条化。
-test('② 英文快照与金标逐字一致（半迁移会在这里现形）', { todo: 'P624: 六个行来源模块尚未词条化' }, () => {
+test('② 英文快照与金标逐字一致（半迁移会在这里现形）', () => {
   const en = check('en', GOLDEN_EN);
   assert.doesNotMatch(en, /[\u4e00-\u9fff]/, '英文快照里仍有中文：' + en.split('\n').filter(function (l) { return /[\u4e00-\u9fff]/.test(l); }).slice(0, 3).join(' | '));
 });

@@ -1,3 +1,4 @@
+import { t as tr } from "./i18n.mjs";   // ★P627：渲染面走词条（别名避开局部变量 t）
 // P526 **采用**（adopt）：把"动手前先检索并真的采用"变成一个可记录的入口。
 //
 // 缺口（2026-10-11 实测，从账本取的数）：
@@ -44,9 +45,9 @@ export function normalizeAdopt(e) {
 export function recordAdopt(list, entry) {
   const arr = Array.isArray(list) ? list.slice() : [];
   const rec = normalizeAdopt(entry);
-  if (!rec) return { list: arr, entry: null, reason: '缺件：sedimentId / forWhat / withoutIt 三件必填（尤其"没有它我会怎么做"——写不出反事实，就不是采用）' };
+  if (!rec) return { list: arr, entry: null, reason: tr('ad.1') };
   if (arr.some(function (e) { return e && e.sedimentId === rec.sedimentId && e.forWhat === rec.forWhat; })) {
-    return { list: arr, entry: null, reason: '重复：同一 (沉积, 决定) 只计一次——同一采用刷两遍不算两次回环' };
+    return { list: arr, entry: null, reason: tr('ad.2') };
   }
   arr.push(rec);
   return { list: arr.length > ADOPT_MAX ? arr.slice(-ADOPT_MAX) : arr, entry: rec, reason: '' };
@@ -97,7 +98,7 @@ export function adoptLine(state, limit) {
   const r = adoptRate(state);
   const n = (typeof limit === 'number' && limit > 0) ? limit : 3;
   const recent = ads.slice(-n).map(function (e) {
-    return '「' + e.sedimentId + '」用于「' + String(e.forWhat).slice(0, 24) + '」（没有它：' + String(e.withoutIt).slice(0, 28) + '）';
+    return '「' + e.sedimentId + tr('ad.3') + String(e.forWhat).slice(0, 24) + tr('ad.4') + String(e.withoutIt).slice(0, 28) + '）';
   });
   // ★P585（2026-10-21）：**这个数必须携带它的定义。**
   //
@@ -108,11 +109,11 @@ export function adoptLine(state, limit) {
   //
   //   ⇒ 修法不是改分母（那会污染这个数的纯度），而是**让数携带定义**：
   //     标注「仅沉积库」，并写明它还漏掉了什么。低估不可怕，被误读才可怕。
-  return '- 采用回流(P526·**动手前检索并真的采用**)：**回环率 ' + r.rate + '%**（' + r.adopted + '/' + r.total
-    + ' 条沉积被真采用 · 共 ' + r.additions + ' 次）'
+  return tr('ad.5') + r.rate + '%**（' + r.adopted + '/' + r.total
+    + tr('ad.6') + r.additions + tr('ad.7')
     + (recent.length ? '：' + recent.join(' · ') : '')
-    + '——**只有"动手前用它改变了做法"才计数；沉积时补一条 links 不算回流**（那是事后补链）。'
-    + '**★ 分母只含沉积库**：非沉积载体（`pending-restart.md` / `README.md` / `docs/*.md` / '
-    + '`preaction.rules.json`）同样会在正确时刻改变做法，而它们**不计入这个数** ⇒ '
-    + '所以它是**沉积库内的**回环率，不是"我的采用率"（真实采用率未知而更高）。';
+    + tr('ad.8')
+    + tr('ad.9')
+    + tr('ad.10')
+    + tr('ad.11');
 }
