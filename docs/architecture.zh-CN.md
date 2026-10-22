@@ -37,7 +37,7 @@ MetaFlywheel 给这类代理一个能活过进程重启的账本。它不是"记
 npm test   →   全部通过 通过
 ```
 
-而重点不是数字。是这 221 条里有相当一部分**被专门设计成能失败**：
+而重点不是数字。是这套判据里有相当一部分**被专门设计成能失败**：
 
 - 喂一个坏数据结构 → 它必须报错，不许静默显示 `0`
 - 一段正常输出里出现错误字样 → 它必须**沉默**（误报比漏报更糟：噪声会被忽略）
@@ -51,7 +51,7 @@ npm test   →   全部通过 通过
 
 ```bash
 git clone <this-repo> && cd metaflywheel
-npm test                      # 221 条判据，不需要任何外部服务
+npm test                      # 全部判据，不需要任何外部服务
 ```
 
 它需要一个宿主才能工作（**不是独立 npm 包**）——当前实现挂在 [DSH](https://github.com/deepseek-ai/dsh)
@@ -96,13 +96,13 @@ npm test                      # 221 条判据，不需要任何外部服务
 ```
 engine/            引擎本体（宿主插件，无独立进程）
   modules/         各功能模块，一个模块一个文件
-test/              221 条判据（node --test，零依赖）
+test/              判据（node --test，零依赖）
 docs/              theory.md（未定稿论文）· architecture.md（实现细节）· ledger.md（编号索引）
 install/           挂载与部署
 view/              可选的可视化
 ```
 
-想看实现细节 → [docs/architecture.md](architecture.md)
+想看实现细节 → [docs/architecture.zh-CN.md](architecture.zh-CN.md)
 想看那篇论文 → [docs/theory.md](theory.md)
 想知道某个编号是什么 → [docs/ledger.md](ledger.md)
 
