@@ -2,6 +2,7 @@
 // 双语料：沉积（熵屏障不可变 → 索引缓存，P073 缓存面②）/ 已结账问题（小语料，每查现算）。
 // P079 修复：P073 改签名后 problem-corpus 分支 4 参错位静默失效 —— 此处恢复为显式双通道。
 import { bigrams } from "./util.mjs";
+import { isRetired } from "./sediment-status.mjs";   // ★P592：退役沉积不参与检索
 
 export const RETRIEVE_TOP_N = 2;
 export const RETRIEVE_MIN_SCORE = 0.35; // 与 M9③ 因材施教同阈值（v0）
@@ -9,13 +10,18 @@ export const RETRIEVE_MIN_SCORE = 0.35; // 与 M9③ 因材施教同阈值（v0�
 // ---- 沉积语料缓存面（P073 缓存面②：append-only 内容指纹键）----
 let sedCorpusCache = { key: '', dfTitle: {}, dfRet: {}, total: 0, items: [] };
 export function sedimentCacheGet(sediments) {
-  const key = sediments.length + ':' + (sediments.length ? sediments[sediments.length - 1].id : '');
+  // ★P592：缓存 key 必须覆盖**过滤输入** —— 只按"长度+末条 id"会漏掉「某条被标记退役」这种变化
+  //   （P539 同族：key 少一个维度 ⇒ 状态改了、缓存仍说没改）
+  let retiredN = 0;
+  for (let i0 = 0; i0 < sediments.length; i0++) if (isRetired(sediments[i0])) retiredN += 1;
+  const key = sediments.length + ':' + (sediments.length ? sediments[sediments.length - 1].id : '') + ':' + retiredN;
   if (sedCorpusCache.key === key) return sedCorpusCache;
   const items = [];
   const seenT = {}, seenR = {};
   const dfTitle = {}, dfRet = {};
   for (let i = 0; i < sediments.length; i++) {
     const s = sediments[i];
+    if (isRetired(s)) continue;   // ★P592：退休 ≠ 删除——只是不进检索，仍可按 ID 查到
     const titleSet = bigrams(s.title);
     const retSet = bigrams(s.title + ' ' + (s.tags || []).join(' '));
     items.push({ ref: s, titleSet: titleSet, retSet: retSet });

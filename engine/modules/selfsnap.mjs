@@ -4,6 +4,7 @@
 //   retrievalHits:(state)=>[{text}], valenceSummaryLine:()=>string, directiveText:()=>string
 //   isParked:(p)=>boolean, isOpen:(p)=>boolean
 import { bigrams, relAgo } from "./util.mjs";
+import { isRetired } from "./sediment-status.mjs";   // ★P592：退役的沉积退出记忆栏与陈旧账
 import { sedimentCacheGet, retrieveTop } from "./retrieval.mjs";
 import { shapeOfPromise } from "./promise.mjs";
 import { staleMsOf, rhythmLine, rhythmOf } from "./rhythm.mjs";
@@ -71,8 +72,10 @@ function renderSnapshotInner(d) {
   const STALE_MS = 14 * 24 * 3600 * 1000;
   const fresh = [];
   let staleCount = 0;
+  let retiredCount = 0;   // ★P592：被取代/被否证 ⇒ 不是「欠引用」，是「已退休」
   for (let j = 0; j < state.sediments.length; j++) {
     const s = state.sediments[j];
+    if (isRetired(s)) { retiredCount += 1; continue; }   // ★P592
     if (!s.lastCitedAt && (nowMs - (s.depositedAt || 0)) > STALE_MS) staleCount += 1;
     else fresh.push(s);
   }
@@ -120,7 +123,7 @@ function renderSnapshotInner(d) {
       mem.push({ s: es, why: '探索' });
     }
   }
-  lines.push('- 记忆（认知遗体，全文在沉积根 .mpm/deposits/，需要时读取；引用数=兑现次数M9②）：');
+  lines.push('- 记忆（认知遗体，全文在沉积根 .mpm/deposits/，需要时读取；引用数=兑现次数M9②）' + (retiredCount ? '　—— 另有 ' + retiredCount + ' 条已退役（被取代/被否证），不参与注入，仍可按 ID 查到' : '') + '：');
   for (let i = 0; i < mem.length; i++) {
     const s = mem[i].s;
     lines.push('  ◆ [' + mem[i].why + '] ' + s.id + ' ' + s.title + (s.cites ? '（引用' + s.cites + '）' : ''));
